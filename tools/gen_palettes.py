@@ -23,6 +23,9 @@ DEFAULT_ASAR = os.path.join(
 )
 PAIR = re.compile(r"(\w+):`([^`]*)`")
 NAMED = ("t3-chat", "grove", "ocean", "ember", "iris")
+# Picker names. The two themes named after a product are named after their
+# colours instead, like the other four.
+LABELS = {"t3-code": "Midnight", "t3-chat": "Plum"}
 
 
 def object_at(text, brace):
@@ -47,7 +50,7 @@ def read_themes(asar):
         if at < 0:
             raise SystemExit("T3 Code default %s theme not found" % mode)
         modes[mode] = object_at(data, data.rfind("={", 0, at) + 1)
-    themes.append({"id": "t3-code", "label": "T3 Code", **modes})
+    themes.append({"id": "t3-code", "label": LABELS["t3-code"], **modes})
     for tid in NAMED:
         at = data.find("id:`%s`,label:" % tid)
         if at < 0:
@@ -57,7 +60,7 @@ def read_themes(asar):
         dark = data.find("variants:{dark:{", colors)
         themes.append({
             "id": tid,
-            "label": label,
+            "label": LABELS.get(tid, label),
             "light": object_at(data, colors + len("colors:")),
             "dark": object_at(data, dark + len("variants:{dark:")),
         })

@@ -39,7 +39,7 @@ Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemin
 
 - **简体中文界面。** Weekly、5-hour 这类额度窗口的名字和各家服务名保留英文。
 - **刻度条。** 每项额度画成 40 格，上面的小三角是节奏线：假如在这个周期里匀速用，此刻应该用到哪里。
-- **七套配色。** 原版加上 T3 Code、T3 Chat、Grove、Ocean、Ember、Iris，每套都有浅色和深色。新加的六套顶部是一片星空，底色带柔和的渐变。在 **AI 来源与显示** 里切换。
+- **七套配色。** 原版加上 Midnight、Plum、Grove、Ocean、Ember、Iris，每套都有浅色和深色。新加的六套顶部是一片星空，底色带柔和的渐变。在 **AI 来源与显示** 里切换。
 - **长条更好懂。** 写全服务名，后面跟「剩」或「已用」和百分比。重置倒计时挪进了鼠标悬停提示，长条不再拉得老长。
 - **长条一键到顶。** 长条的第一个按钮把它移到屏幕顶部正中，取代了原来「停到任务栏上」的按钮。
 - **支持 Antigravity 2.34 及以后。** 新版 Antigravity 把连接信息写在 `~/.gemini/antigravity/daemon/` 里，现在从那里读。Antigravity 卡片只显示 Gemini 那一组额度。

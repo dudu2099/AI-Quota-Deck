@@ -4,7 +4,7 @@ export const PALETTE_KEY = "quota-deck-palette";
 export const PALETTES = [
   {
     "id": "t3-code",
-    "label": "T3 Code",
+    "label": "Midnight",
     "light": {
       "canvas": "#fcfcfc",
       "accent": "#1b4ed8"
@@ -16,7 +16,7 @@ export const PALETTES = [
   },
   {
     "id": "t3-chat",
-    "label": "T3 Chat",
+    "label": "Plum",
     "light": {
       "canvas": "oklch(0.982446 0.010114 325.653)",
       "accent": "oklch(0.591646 0.217985 0.584)"

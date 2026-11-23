@@ -39,7 +39,7 @@ A Windows tray dashboard that shows how much of each AI allowance is left and wh
 
 - **Simplified Chinese interface.** Window names such as Weekly and 5-hour, and the provider names, stay in English.
 - **Tick meters.** Each allowance is drawn as 40 ticks. A small triangle marks the pace: where usage would be if it were spread evenly across the window.
-- **Seven palettes.** The original look plus T3 Code, T3 Chat, Grove, Ocean, Ember, and Iris, each in light and dark. The six new palettes add a starry night-sky header and soft gradients. Choose one under **AI 来源与显示** (AI sources & display).
+- **Seven palettes.** The original look plus Midnight, Plum, Grove, Ocean, Ember, and Iris, each in light and dark. The six new palettes add a starry night-sky header and soft gradients. Choose one under **AI 来源与显示** (AI sources & display).
 - **A clearer strip.** Full provider names, then 剩 (left) or 已用 (used) and the percentage. The reset countdown moved into the hover tooltip to keep the strip short.
 - **Move the strip to the top.** The strip's first button moves it to the top centre of the screen. It replaces the pin-above-the-taskbar button.
 - **Antigravity 2.34 and later.** Newer Antigravity versions write their connection details to `~/.gemini/antigravity/daemon/`; the deck now reads them there. The Antigravity card shows only the Gemini allowance.
