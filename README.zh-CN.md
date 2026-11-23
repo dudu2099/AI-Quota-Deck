@@ -1,6 +1,6 @@
 # 📊 AI Quota Deck
 
-Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemini、Grok、Grok Bot 各还剩多少、什么时候重置，一眼看清。
+Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemini、Grok、Grok Bot 各还剩多少、什么时候重置，今天用了多少 token，一眼看清。
 
 [English](./README.md) | **简体中文** | [日本語](./README.ja.md)
 
@@ -43,6 +43,7 @@ Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemin
 - **长条更好懂。** 写全服务名，后面跟「剩」或「已用」和百分比。重置倒计时挪进了鼠标悬停提示，长条不再拉得老长。
 - **长条一键到顶。** 长条的第一个按钮把它移到屏幕顶部正中，取代了原来「停到任务栏上」的按钮。
 - **支持 Antigravity 2.34 及以后。** 新版 Antigravity 把连接信息写在 `~/.gemini/antigravity/daemon/` 里，现在从那里读。Antigravity 卡片只显示 Gemini 那一组额度。
+- **今日 token。** 主面板多了「今日 Token」一块，把你今天在 Claude Code、Codex、Gemini 和 Grok 命令行里用掉的 token 加起来，数据取自这台电脑上的本地记录。长条最后一段显示今天的合计。详见[今日 Token](#今日-token)。
 
 ---
 
@@ -68,6 +69,27 @@ Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemin
 - 托盘菜单，可选开机自启动
 - 某家或浏览器暂时连不上时，显示上次的读数
 - Windows 空闲或锁屏时暂停查询 Claude Code；登录过期时通过官方命令行恢复；碰到限流会安全地退避
+
+---
+
+## 今日 Token
+
+主面板最下面的「今日 Token」先给一个合计，再每个工具一行。每行统计的是零点以来的每一次模型调用，直接读这个工具在本机留下的文件：
+
+| 行 | 从哪读 | 怎么算 |
+|---|---|---|
+| **Claude Code** | `~/.claude/projects` 里的会话记录，含子代理 | 每条回复算一次 |
+| **Codex** | `~/.codex/sessions` 和 `~/.codex/archived_sessions` 里的会话记录 | 每条回复算一次 |
+| **Gemini** | `~/.gemini/` 下 Antigravity 的对话数据库：IDE、`agy` 命令行、T3 三处 | 每次模型调用算一次 |
+| **Grok** | Grok 命令行在 `~/.grok/sessions` 里的 `usage.json` | 每轮算一次 |
+
+- **大数字是处理过的全部 token，含读缓存**，和 ccusage 的算法一样。下面一行小字拆成「新算」和「读缓存」，再加调用次数。通常大头是读缓存。
+- **Grok Bot 不记 token。** 它那一句改成显示今天用掉了周额度的几个点，从看板当天第一次读到数开始算。
+- **鼠标悬停看细分。** Gemini 那一行可以看 IDE、agy、T3 各用了多少。长条上的 **TOKEN** 一段显示合计，悬停列出每个工具。
+- **多久刷新一次。** 主面板、小窗或长条开着时每分钟一次。第一次要扫一遍今天的记录，之后只读新追加的部分。
+- **一天从几点算起。** 默认按电脑时区的零点。想按别的时区算，在 `%LOCALAPPDATA%\ai-quota-deck\token-usage.json` 里写上和 UTC 相差的分钟数，比如东八区写 `{"day_utc_offset_minutes": 480}`。
+
+没装的工具或读不到的文件，那一行显示「—」和原因；合计会写明哪一家没算进去。
 
 ---
 
@@ -173,6 +195,7 @@ AI Quota Deck 没有遥测，什么都不上传。
 - Grok Bot 在本地经过 Chromium 加密的访问令牌，只在实时查询用量时用 Windows DPAPI 解开。它的刷新令牌看板从不解析、解密、使用、缓存或外传。
 - 浏览器桥只能读 `gemini.google.com` 和 `grok.com`。
 - 到达程序的只有额度数值、重置时间、服务和账号位置、读取时间。Cookie 和页面令牌留在浏览器里。
+- 今日 token 只读本机文件，Antigravity 的数据库以只读方式打开。看板只留 token 数和时间，不留任何对话内容。
 
 ---
 
@@ -181,6 +204,8 @@ AI Quota Deck 没有遥测，什么都不上传。
 这些服务的用量是通过没有公开文档的内部接口拿的。哪家的返回格式一变，那张卡片就可能失灵；别家照常工作。
 
 同一个浏览器服务登录了多个账号时，显示最近上报的那个。还不能指定账号。
+
+今日 token 依赖各工具本地记录的格式，这些格式都没有公开文档；Gemini 的数取自 Antigravity 内部的数据库格式。在云端会话里用掉的 token 不会落到这台电脑上，所以不算在内。
 
 ---
 

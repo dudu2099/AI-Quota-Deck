@@ -1,6 +1,6 @@
 # 📊 AI Quota Deck
 
-A Windows tray dashboard that shows how much of each AI allowance is left and when it resets — Codex, Antigravity, Claude Code, Gemini, Grok, and Grok Bot.
+A Windows tray dashboard that shows how much of each AI allowance is left and when it resets — Codex, Antigravity, Claude Code, Gemini, Grok, and Grok Bot — and how many tokens you have used today.
 
 **English** | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
 
@@ -43,6 +43,7 @@ A Windows tray dashboard that shows how much of each AI allowance is left and wh
 - **A clearer strip.** Full provider names, then 剩 (left) or 已用 (used) and the percentage. The reset countdown moved into the hover tooltip to keep the strip short.
 - **Move the strip to the top.** The strip's first button moves it to the top centre of the screen. It replaces the pin-above-the-taskbar button.
 - **Antigravity 2.34 and later.** Newer Antigravity versions write their connection details to `~/.gemini/antigravity/daemon/`; the deck now reads them there. The Antigravity card shows only the Gemini allowance.
+- **Today's tokens.** A **今日 Token** section totals the tokens you used today in Claude Code, Codex, Gemini, and the Grok CLI, counted from their logs on this computer. The strip ends with the day's total. See [Today's tokens](#todays-tokens).
 
 ---
 
@@ -68,6 +69,27 @@ Also included from the original:
 - Tray menu and optional launch at startup (**开机自启动**)
 - Cached readings when a provider or browser is temporarily unavailable
 - Claude Code polling pauses while Windows is idle or locked, recovers expired OAuth sessions through the official CLI, and backs off safely after rate limits
+
+---
+
+## Today's tokens
+
+The **今日 Token** section at the bottom of the dashboard shows a total and one row per tool. Each row counts every model call made since midnight, read from that tool's own files on this computer:
+
+| Row | Read from | Counted |
+|---|---|---|
+| **Claude Code** | Session logs in `~/.claude/projects`, subagents included | Once per response |
+| **Codex** | Session logs in `~/.codex/sessions` and `~/.codex/archived_sessions` | Once per response |
+| **Gemini** | Antigravity's conversation databases under `~/.gemini/`, for the IDE, the `agy` CLI, and T3 | Once per model call |
+| **Grok** | The Grok CLI's `usage.json` files in `~/.grok/sessions` | Once per turn |
+
+- **The big figure is every token processed, cache reads included**, the way ccusage counts. The line under it splits that into 新算 (newly processed) and 读缓存 (cache reads), plus the number of calls. Cache reads are usually most of the total.
+- **Grok Bot keeps no token counts.** Its line instead shows how many points of the weekly allowance today used, counted from the deck's first reading that day.
+- **Hover for detail.** The Gemini row splits its figure into IDE, agy, and T3. In the strip, the **TOKEN** segment shows the total, and hovering it lists each tool.
+- **When it refreshes.** Every minute while the dashboard, widget, or strip is showing. The first read scans today's logs; after that the deck reads only what was appended.
+- **When the day starts.** Midnight in the computer's time zone. To count from midnight in another zone, create `%LOCALAPPDATA%\ai-quota-deck\token-usage.json` with the offset from UTC in minutes, for example `{"day_utc_offset_minutes": 480}` for UTC+8.
+
+A tool that is not installed, or whose files cannot be read, shows a dash and the reason; the total names what it left out.
 
 ---
 
@@ -173,6 +195,7 @@ AI Quota Deck has no telemetry and uploads nothing.
 - Grok Bot's Chromium-encrypted local access token is unlocked with Windows DPAPI only for the live usage request. Its refresh token is never deserialized, decrypted, used, cached, or sent anywhere by the deck.
 - The bridge can read only `gemini.google.com` and `grok.com`.
 - Only quota values, reset times, provider/account slots, and observation times reach the app. Cookies and page tokens stay in the browser.
+- Today's tokens are counted from local files only, and the Antigravity databases are opened read-only. The deck keeps token counts and timestamps, never message content.
 
 ---
 
@@ -181,6 +204,8 @@ AI Quota Deck has no telemetry and uploads nothing.
 These providers expose usage through undocumented internal endpoints. A provider card may stop working when its response format changes; the other providers continue independently.
 
 If the same browser provider is signed in with multiple accounts, the most recently reported account is shown. Account pinning is not implemented yet.
+
+Today's tokens depend on each tool's local log format, none of which is documented; Gemini's figure relies on Antigravity's internal database format. Work done in cloud sessions never reaches this computer and is not counted.
 
 ---
 
