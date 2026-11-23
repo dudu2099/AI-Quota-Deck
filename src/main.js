@@ -11,6 +11,9 @@ import {
 } from "./polling.js";
 import { displayedPercent, usageDisplayLabel } from "./widget-model.js";
 import { PALETTE_KEY, PALETTES } from "./palettes.js";
+import { mountStageArt } from "./stage-art.js";
+
+mountStageArt();
 const { invoke } = window.__TAURI__.core;
 const { emitTo, listen } = window.__TAURI__.event;
 

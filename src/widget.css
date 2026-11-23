@@ -328,6 +328,83 @@ body {
   padding: 0 14px;
 }
 
+/* ── Stage artwork ────────────────────────────────────────────────────────
+   With a T3 palette, T3's night sky fills the widget header and the whole
+   strip. The artwork keeps its full 96px height and is clipped, so the stars
+   stay at their real size instead of shrinking into the 30px band. */
+
+.widget {
+  position: relative;
+}
+
+.stage {
+  display: none;
+}
+
+:root[data-palette] .stage {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 29px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+:root[data-palette][data-mode="strip"] .stage {
+  height: 100%;
+}
+
+.stage-art {
+  display: block;
+  width: 100%;
+  height: 96px;
+}
+
+:root[data-palette] .widget > :not(.stage) {
+  position: relative;
+}
+
+:root[data-palette] .widget-head {
+  border-bottom-color: transparent;
+  background: transparent;
+}
+
+:root[data-palette] .widget-title,
+:root[data-palette] .widget-status,
+:root[data-palette] .widget-controls button {
+  color: var(--stage-night-line);
+}
+
+:root[data-palette] .widget-controls button:hover {
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
+:root[data-palette][data-mode="strip"] .widget {
+  border-color: rgb(255 255 255 / 0.16);
+  background: var(--stage-night-bottom);
+}
+
+:root[data-palette][data-mode="strip"] .widget-head,
+:root[data-palette][data-mode="strip"] .widget-provider {
+  border-color: rgb(255 255 255 / 0.12);
+}
+
+:root[data-palette][data-mode="strip"] .provider-name {
+  color: var(--stage-night-line);
+}
+
+:root[data-palette][data-mode="strip"] .metric-usage,
+:root[data-palette][data-mode="strip"] .metric-period {
+  color: color-mix(in oklch, var(--stage-night-line) 70%, transparent);
+}
+
+:root[data-palette][data-mode="strip"] .widget-metric.ok .metric-value {
+  color: var(--stage-night-highlight);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .widget {
     backdrop-filter: none;

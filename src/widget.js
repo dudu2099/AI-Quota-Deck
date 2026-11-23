@@ -9,6 +9,9 @@ import {
   WIDGET_PROVIDERS,
   widgetWindows,
 } from "./widget-model.js";
+import { mountStageArt } from "./stage-art.js";
+
+mountStageArt();
 
 const { invoke } = window.__TAURI__.core;
 const { emitTo, listen } = window.__TAURI__.event;

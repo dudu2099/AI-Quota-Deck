@@ -146,6 +146,65 @@ body {
   color: var(--loading);
 }
 
+/* ── Stage artwork ────────────────────────────────────────────────────────
+   With a T3 palette, T3's night-sky band sits behind the header and fades
+   into the panel, as it does atop T3's sidebar. The original palette has no
+   data-palette attribute and keeps its plain gradient. */
+
+.deck {
+  position: relative;
+}
+
+.stage {
+  display: none;
+}
+
+:root[data-palette] .stage {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 140px;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(#000 0% 48%, transparent 100%);
+  mask-image: linear-gradient(#000 0% 48%, transparent 100%);
+}
+
+.stage-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Positioned so they paint above the absolutely placed artwork. */
+:root[data-palette] .deck > :not(.stage) {
+  position: relative;
+}
+
+/* The sky's own fade separates the head from the list; a rule across it reads
+   as a seam. */
+:root[data-palette] .deck-head,
+:root[data-palette] .provider-controls {
+  border-bottom-color: transparent;
+}
+
+:root[data-palette] .wordmark,
+:root[data-palette] .refresh-status,
+:root[data-palette] .deck-head .tool {
+  color: var(--stage-night-line);
+}
+
+:root[data-palette] .refresh-status #countdown {
+  color: color-mix(in oklch, var(--stage-night-line) 72%, transparent);
+}
+
+:root[data-palette] .deck-head .tool:hover,
+:root[data-palette] .deck-head .tool[aria-pressed="true"] {
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
 /* Only one of the two theme glyphs shows, whichever offers the other mode. */
 :root[data-theme="dark"] .icon-to-dark,
 :root:not([data-theme="dark"]) .icon-to-light {
