@@ -16,6 +16,10 @@ use crate::claude::provider_cache_dir;
 use crate::quota::{http_failure, now, rfc3339_to_unix, ProviderQuota, QuotaWindow, Stale};
 
 const PROVIDER: &str = "antigravity";
+/// The Claude and GPT pool (`3p-weekly`, `3p-5h`) is left off the card: this
+/// deck tracks Claude and GPT through their own subscriptions, so Antigravity
+/// shows only its Gemini allowance.
+const THIRD_PARTY_BUCKET_PREFIX: &str = "3p-";
 const SERVICE_PATH: &str = "exa.language_server_pb.LanguageServerService";
 /// The x64 and ARM builds of the language server differ only in name; the hub
 /// build that Antigravity 2.34 ships is plain `language_server.exe`.
@@ -126,6 +130,8 @@ struct Group {
 /// has a denominator, so only it can become a percentage.
 #[derive(Deserialize)]
 struct Bucket {
+    #[serde(rename = "bucketId", default)]
+    bucket_id: String,
     #[serde(default)]
     window: String,
     #[serde(rename = "remainingFraction", default)]
@@ -691,7 +697,7 @@ fn windows_from(summary: &Summary) -> Vec<QuotaWindow> {
     for group in &summary.groups {
         let scope = group_short(&group.display_name);
         for bucket in &group.buckets {
-            if bucket.disabled {
+            if bucket.disabled || bucket.bucket_id.starts_with(THIRD_PARTY_BUCKET_PREFIX) {
                 continue;
             }
             let Some(remaining) = bucket.remaining_fraction else {
@@ -1183,41 +1189,26 @@ mod tests {
     }
 
     #[test]
-    fn maps_the_measured_summary_onto_four_windows() {
+    fn maps_the_measured_summary_onto_the_gemini_windows_only() {
         let windows = windows_from(&summary_from(SUMMARY_FIXTURE));
-        assert_eq!(windows.len(), 4);
 
         let labels: Vec<&str> = windows.iter().map(|w| w.label.as_str()).collect();
-        assert_eq!(
-            labels,
-            [
-                "Weekly · Gemini",
-                "Session (5h) · Gemini",
-                "Weekly · Claude+GPT",
-                "Session (5h) · Claude+GPT"
-            ]
-        );
+        assert_eq!(labels, ["Weekly · Gemini", "Session (5h) · Gemini"]);
 
         assert!((windows[0].percent - 0.3159).abs() < 1e-4);
         assert_eq!(windows[1].percent, 0.0);
-        assert_eq!(windows[2].percent, 0.0);
-        assert_eq!(windows[3].percent, 0.0);
 
         assert_eq!(windows[0].window_seconds, Some(604_800));
         assert_eq!(windows[1].window_seconds, Some(18_000));
-        assert_eq!(windows[2].window_seconds, Some(604_800));
-        assert_eq!(windows[3].window_seconds, Some(18_000));
 
         // Only the bucket with something spent carries a real deadline; the
-        // other three report a moving placeholder and get none.
+        // untouched one reports a moving placeholder and gets none.
         assert_eq!(windows[0].resets_at, Some(1_787_539_847));
         assert_eq!(
             windows[0].resets_at,
             rfc3339_to_unix("2026-08-24T02:50:47Z")
         );
         assert_eq!(windows[1].resets_at, None);
-        assert_eq!(windows[2].resets_at, None);
-        assert_eq!(windows[3].resets_at, None);
 
         assert!(windows.iter().all(|w| w.severity.is_none()));
     }
@@ -1312,7 +1303,7 @@ mod tests {
             panic!("a recent snapshot should stay visible as cached");
         };
         assert_eq!(plan.as_deref(), Some("Google AI Pro"));
-        assert_eq!(cached.len(), 4);
+        assert_eq!(cached.len(), windows.len());
         assert_eq!(cached[0].label, windows[0].label);
         assert_eq!(cached[0].percent, windows[0].percent);
         assert_eq!(cached[0].resets_at, windows[0].resets_at);
@@ -1327,7 +1318,7 @@ mod tests {
         else {
             panic!("rows without a deadline remain");
         };
-        assert_eq!(later.len(), 3);
+        assert_eq!(later.len(), windows.len() - 1);
         assert!(later.iter().all(|w| w.resets_at.is_none()));
     }
 
@@ -1384,7 +1375,7 @@ mod tests {
     /// Needs a signed-in Antigravity IDE running on this machine.
     #[test]
     #[ignore = "requires a running Antigravity IDE"]
-    fn live_ide_reports_four_windows() {
+    fn live_ide_reports_the_gemini_windows() {
         let quota = tauri::async_runtime::block_on(fetch());
         let ProviderQuota::Ok {
             plan,
@@ -1399,8 +1390,13 @@ mod tests {
             );
         };
         assert!(stale.is_none(), "a running IDE must answer live");
-        assert_eq!(windows.len(), 4);
+        assert_eq!(windows.len(), 2);
         for window in windows {
+            assert!(
+                window.label.ends_with("· Gemini"),
+                "unexpected label {}",
+                window.label
+            );
             assert!(
                 window.label.starts_with("Weekly") || window.label.starts_with("Session (5h)"),
                 "unexpected label {}",
