@@ -17,6 +17,7 @@ import {
   compactWindowLabel,
   displayedPercent,
   quotaTone,
+  stripUsageLabel,
   usageDisplayLabel,
   visibleProviders,
   WIDGET_PROVIDERS,
@@ -130,10 +131,10 @@ test("widget keeps both Antigravity weekly pools and drops the five-hour ones", 
   assert.equal(compactWindowLabel(windows[2]), "Claude+GPT");
 });
 
-test("strip shortens provider titles and widget keeps the full name", () => {
+test("strip spells out provider names, calling Antigravity by its Gemini pool", () => {
   assert.deepEqual(
     WIDGET_PROVIDERS.map((provider) => compactProviderName(provider, true)),
-    ["CL", "CO", "AG", "GE", "GR", "GB"],
+    ["Claude", "Codex", "Gemini", "Gemini 网页", "Grok", "Grok Bot"],
   );
   assert.equal(compactProviderName(WIDGET_PROVIDERS[0], false), "Claude");
 });
@@ -154,6 +155,8 @@ test("usage display can show consumed or remaining allowance", () => {
   assert.equal(displayedPercent(105, "remaining"), 0);
   assert.equal(usageDisplayLabel("used"), "已用");
   assert.equal(usageDisplayLabel("remaining"), "剩余");
+  assert.equal(stripUsageLabel("used"), "已用");
+  assert.equal(stripUsageLabel("remaining"), "剩");
 });
 
 test("last-updated uses observations, never failed attempt time", () => {

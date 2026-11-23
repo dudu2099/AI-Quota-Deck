@@ -319,6 +319,21 @@ body {
   border-right: 0;
 }
 
+:root[data-mode="strip"] .widget-metric {
+  gap: 4px;
+}
+
+.metric-usage {
+  color: var(--label);
+  font-size: 8.5px;
+}
+
+.metric-reset {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
 :root[data-mode="strip"] .widget-empty {
   align-self: center;
   padding: 0 14px;

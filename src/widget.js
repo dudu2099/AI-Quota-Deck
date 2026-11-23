@@ -3,6 +3,7 @@ import {
   compactWindowLabel,
   displayedPercent,
   quotaTone,
+  stripUsageLabel,
   usageDisplayLabel,
   visibleProviders,
   WIDGET_PROVIDERS,
@@ -70,20 +71,28 @@ function staleDetails(providerId, quota) {
   return details.join(" · ");
 }
 
-function renderMetric(window_) {
+function resetText(window_) {
+  if (!window_.resets_at) return "";
+  const left = window_.resets_at - nowSec();
+  return left > 0 ? `${duration(left)}后重置` : "正在重置";
+}
+
+/** The strip spells each figure out ("剩 56% 1天21小时后重置") and names the
+ *  window only when one provider shows several, since a lone one is weekly. */
+function renderMetric(window_, sharesRow) {
   const metric = el("span", `widget-metric ${quotaTone(window_.percent, window_.severity)}`);
   const percent = displayedPercent(window_.percent, preferences.usage_display);
   const displayLabel = usageDisplayLabel(preferences.usage_display);
-  const reset = window_.resets_at
-    ? window_.resets_at > nowSec()
-      ? ` · ${duration(window_.resets_at - nowSec())}后重置`
-      : " · 正在重置"
-    : "";
-  metric.title = `${window_.label}：${Math.round(percent)}% ${displayLabel}${reset}`;
-  metric.append(
-    el("span", "metric-period", compactWindowLabel(window_)),
-    el("span", "metric-value", `${Math.round(percent)}%`),
-  );
+  const reset = resetText(window_);
+  metric.title = `${window_.label}：${Math.round(percent)}% ${displayLabel}${reset ? ` · ${reset}` : ""}`;
+  if (!preferences.strip || sharesRow) {
+    metric.append(el("span", "metric-period", compactWindowLabel(window_)));
+  }
+  if (preferences.strip) {
+    metric.append(el("span", "metric-usage", stripUsageLabel(preferences.usage_display)));
+  }
+  metric.append(el("span", "metric-value", `${Math.round(percent)}%`));
+  if (preferences.strip && reset) metric.append(el("span", "metric-reset", reset));
   return metric;
 }
 
@@ -119,7 +128,7 @@ function renderProvider(provider, quota) {
       missing.append(el("span", "metric-period", "7d"), el("span", "metric-value", "—"));
       metrics.append(missing);
     } else {
-      metrics.append(...windows.map(renderMetric));
+      metrics.append(...windows.map((window_) => renderMetric(window_, windows.length > 1)));
     }
   }
   row.append(metrics);

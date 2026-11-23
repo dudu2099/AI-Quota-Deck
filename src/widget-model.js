@@ -1,10 +1,12 @@
 export const WIDGET_PROVIDERS = [
-  { id: "claude", name: "Claude", stripName: "CL" },
-  { id: "codex", name: "Codex", stripName: "CO" },
-  { id: "antigravity", name: "Antigravity", stripName: "AG" },
-  { id: "gemini", name: "Gemini", stripName: "GE" },
-  { id: "grok", name: "Grok", stripName: "GR" },
-  { id: "grok_bot", name: "Grok Bot", stripName: "GB" },
+  { id: "claude", name: "Claude", stripName: "Claude" },
+  { id: "codex", name: "Codex", stripName: "Codex" },
+  // Antigravity reports only its Gemini pool here, so the strip names the pool;
+  // the Gemini web app takes the longer name to keep the two apart.
+  { id: "antigravity", name: "Antigravity", stripName: "Gemini" },
+  { id: "gemini", name: "Gemini", stripName: "Gemini 网页" },
+  { id: "grok", name: "Grok", stripName: "Grok" },
+  { id: "grok_bot", name: "Grok Bot", stripName: "Grok Bot" },
 ];
 
 export function compactProviderName(provider, strip) {
@@ -68,4 +70,9 @@ export function displayedPercent(usedPercent, mode = "used") {
 
 export function usageDisplayLabel(mode = "used") {
   return mode === "remaining" ? "剩余" : "已用";
+}
+
+/** The one-word prefix the strip prints before each figure. */
+export function stripUsageLabel(mode = "used") {
+  return mode === "remaining" ? "剩" : "已用";
 }
