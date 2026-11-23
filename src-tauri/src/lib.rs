@@ -185,6 +185,14 @@ fn set_taskbar_overlay(
 }
 
 #[tauri::command]
+fn centre_strip_at_top(
+    app: AppHandle,
+    state: State<'_, widget::WidgetState>,
+) -> Result<widget::WidgetPreferences, String> {
+    widget::centre_strip_at_top(&app, &state)
+}
+
+#[tauri::command]
 fn set_provider_hidden(
     app: AppHandle,
     state: State<'_, widget::WidgetState>,
@@ -485,6 +493,7 @@ pub fn run() {
             start_widget_drag,
             resize_widget,
             set_taskbar_overlay,
+            centre_strip_at_top,
             set_provider_hidden,
             set_usage_display,
             open_dashboard

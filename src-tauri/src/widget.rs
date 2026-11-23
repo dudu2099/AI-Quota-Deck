@@ -548,6 +548,55 @@ pub fn set_taskbar_overlay(
     Ok(preferences)
 }
 
+/// Where the strip lands when the user asks for the top of the screen: flush
+/// with the top of the monitor's work area, centred across it.
+fn top_centre(area_x: i32, area_y: i32, area_width: u32, window_width: u32) -> PhysicalPosition<i32> {
+    let spare = i64::from(area_width) - i64::from(window_width);
+    let x = i64::from(area_x) + spare / 2;
+    PhysicalPosition::new(i32::try_from(x).unwrap_or(area_x), area_y)
+}
+
+/// Move the strip to the top centre of the monitor it is on and remember that
+/// spot as if the user had dragged it there. The taskbar overlay is switched
+/// off, otherwise its watcher would pull the strip back down to the taskbar.
+pub fn centre_strip_at_top(
+    app: &AppHandle,
+    state: &WidgetState,
+) -> Result<WidgetPreferences, String> {
+    let previous = state.snapshot()?;
+    if previous.mode() != DisplayMode::Strip {
+        return Err("只有长条能移到屏幕顶部".to_string());
+    }
+    let window = app
+        .get_webview_window(WINDOW_LABEL)
+        .ok_or_else(|| "找不到小窗窗口".to_string())?;
+    let monitor = match window.current_monitor().map_err(|error| error.to_string())? {
+        Some(monitor) => monitor,
+        None => window
+            .primary_monitor()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "读不到屏幕".to_string())?,
+    };
+    let area = monitor.work_area();
+    let size = window.outer_size().map_err(|error| error.to_string())?;
+    let position = top_centre(area.position.x, area.position.y, area.size.width, size.width);
+
+    state.expect_programmatic_position(position);
+    state.suspend_position_updates(true);
+    let moved = window
+        .set_position(position)
+        .map_err(|error| error.to_string());
+    state.suspend_position_updates(false);
+    moved?;
+
+    let mut next = previous;
+    next.taskbar_overlay = false;
+    store_position(&mut next, position);
+    let preferences = state.replace(next)?;
+    emit_preferences(app, &preferences);
+    Ok(preferences)
+}
+
 pub fn start_dragging(window: &WebviewWindow, state: &WidgetState) -> Result<(), String> {
     if window.label() != WINDOW_LABEL {
         return Err("只有小窗窗口能使用拖动命令".to_string());
@@ -735,6 +784,16 @@ mod tests {
             ),
             Some(PhysicalPosition::new(-268, 24))
         );
+    }
+
+    #[test]
+    fn top_centre_sits_on_the_top_edge_in_the_middle() {
+        assert_eq!(top_centre(0, 0, 2560, 960), PhysicalPosition::new(800, 0));
+        // A second monitor to the left, with its work area starting below a
+        // top-docked taskbar.
+        assert_eq!(top_centre(-1920, 48, 1920, 900), PhysicalPosition::new(-1410, 48));
+        // A strip wider than the screen overhangs both edges equally.
+        assert_eq!(top_centre(0, 0, 800, 900), PhysicalPosition::new(-50, 0));
     }
 
     #[test]

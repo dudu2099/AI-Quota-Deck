@@ -18,7 +18,7 @@ const statusEl = document.getElementById("widget-status");
 const dragHandleEl = document.getElementById("widget-drag-handle");
 const widgetEl = document.querySelector(".widget");
 const openDashboardEl = document.getElementById("open-dashboard");
-const taskbarOverlayEl = document.getElementById("taskbar-overlay");
+const centreStripEl = document.getElementById("centre-strip");
 const lockWidgetEl = document.getElementById("lock-widget");
 const hideWidgetEl = document.getElementById("hide-widget");
 
@@ -251,7 +251,6 @@ function applyPreferences(next) {
   preferences = { ...preferences, ...next };
   document.documentElement.dataset.locked = preferences.locked.toString();
   document.documentElement.dataset.mode = preferences.strip ? "strip" : "widget";
-  document.documentElement.dataset.taskbarOverlay = preferences.taskbar_overlay.toString();
   widgetEl.setAttribute(
     "aria-label",
     preferences.strip ? "AI 额度长条" : "AI 额度小窗",
@@ -261,11 +260,6 @@ function applyPreferences(next) {
     "aria-label",
     preferences.locked ? "解锁小窗位置" : "锁定小窗位置",
   );
-  taskbarOverlayEl.title = preferences.taskbar_overlay
-    ? "不再让长条停在任务栏上方"
-    : "让长条停在任务栏上方";
-  taskbarOverlayEl.setAttribute("aria-label", taskbarOverlayEl.title);
-  taskbarOverlayEl.setAttribute("aria-pressed", preferences.taskbar_overlay.toString());
   hideWidgetEl.title = preferences.strip ? "隐藏长条" : "隐藏小窗";
   hideWidgetEl.setAttribute("aria-label", hideWidgetEl.title);
   render();
@@ -298,11 +292,11 @@ lockWidgetEl.addEventListener("click", () => {
   void invoke("set_widget_locked", { locked: !preferences.locked });
 });
 
-taskbarOverlayEl.addEventListener("click", () => {
-  void invoke("set_taskbar_overlay", { enabled: !preferences.taskbar_overlay })
+centreStripEl.addEventListener("click", () => {
+  void invoke("centre_strip_at_top")
     .then(applyPreferences)
     .catch((error) => {
-      taskbarOverlayEl.title = `无法切换任务栏置顶：${error}`;
+      centreStripEl.title = `没能移到屏幕顶部：${error}`;
     });
 });
 

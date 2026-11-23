@@ -103,17 +103,12 @@ body {
   place-items: center;
 }
 
-#taskbar-overlay {
+#centre-strip {
   display: none;
 }
 
-:root[data-mode="strip"] #taskbar-overlay {
+:root[data-mode="strip"] #centre-strip {
   display: grid;
-}
-
-:root[data-taskbar-overlay="true"] #taskbar-overlay {
-  background: var(--hover);
-  color: var(--ok);
 }
 
 .widget-controls button:hover {
