@@ -129,7 +129,7 @@ struct Oauth {
     access_token: String,
 }
 
-const CLI_LOGIN_HINT: &str = "Claude Code CLI sign-in needs attention. Open a terminal, run claude, then /login to sign in again. Claude Desktop sign-in does not confirm the CLI login.";
+const CLI_LOGIN_HINT: &str = "Claude Code 命令行的登录需要处理。打开终端，运行 claude，再输入 /login 重新登录。Claude 桌面版显示已登录，不代表命令行也已登录。";
 
 fn local_login_issue(oauth: &Oauth) -> Option<String> {
     // expiresAt is CLI-owned metadata, not proof that the server rejects this
@@ -165,10 +165,10 @@ pub fn local_login_status() -> LocalLoginStatus {
 fn rate_limit_message(failures: u32) -> String {
     let mut message = http_failure(
         reqwest::StatusCode::TOO_MANY_REQUESTS,
-        "the Claude usage endpoint",
+        "Claude 用量接口",
     );
     if failures >= 3 {
-        message.push_str(" Repeated rate limits can also occur with an invalid CLI login. Open a terminal, run claude and check /status; if sign-in has expired, run /login. Claude Desktop may still appear signed in.");
+        message.push_str("命令行登录失效也会导致反复限流。打开终端，运行 claude 并查看 /status；如果登录已过期，运行 /login。Claude 桌面版可能仍显示已登录。");
     }
     message
 }
@@ -373,26 +373,26 @@ fn record_refresh_failure() {
 fn read_credentials_from_path(path: &Path) -> Result<Credentials, FetchError> {
     let raw = std::fs::read_to_string(path).map_err(|error| {
         FetchError::plain(format!(
-            "cannot read {} — is Claude Code installed and signed in? ({error})",
+            "无法读取 {}，Claude Code 装了并登录了吗？（{error}）",
             path.display()
         ))
     })?;
     // serde_json errors carry a position, not file content, so this is safe to
     // surface. Nothing below may ever interpolate the token itself.
     serde_json::from_str(&raw).map_err(|error| {
-        FetchError::plain(format!("unexpected shape in .credentials.json: {error}"))
+        FetchError::plain(format!(".credentials.json 的格式不对：{error}"))
     })
 }
 
 fn read_credentials() -> Result<Credentials, FetchError> {
     let path = credentials_path()
-        .ok_or_else(|| FetchError::plain("could not locate the home directory"))?;
+        .ok_or_else(|| FetchError::plain("找不到用户主目录"))?;
     read_credentials_from_path(&path)
 }
 
 fn read_credentials_snapshot() -> Result<(Credentials, i64), FetchError> {
     let path = credentials_path()
-        .ok_or_else(|| FetchError::plain("could not locate the home directory"))?;
+        .ok_or_else(|| FetchError::plain("找不到用户主目录"))?;
 
     // Claude Code replaces this file during login. Pair the parsed token with a
     // stable before/after generation so a response cannot be assigned to a
@@ -407,7 +407,7 @@ fn read_credentials_snapshot() -> Result<(Credentials, i64), FetchError> {
     }
 
     Err(FetchError::plain(
-        "Claude Code credentials changed while being read — retrying on the next check",
+        "读取时 Claude Code 凭据发生了变化，下次检查时重试",
     ))
 }
 
@@ -498,7 +498,7 @@ fn cached_quota_from_raw(raw: &str, current_time: i64, reason: &str) -> Option<P
         snapshot.plan,
         snapshot.windows,
         Stale {
-            source: "last successful Claude check".to_string(),
+            source: "上次成功的 Claude 查询".to_string(),
             observed_at: Some(snapshot.observed_at),
             reason: reason.to_string(),
         },
@@ -513,9 +513,9 @@ fn cached_quota(reason: &str) -> Option<ProviderQuota> {
 fn signed_out_quota(cached: Option<ProviderQuota>, cache_exists: bool) -> ProviderQuota {
     cached.unwrap_or_else(|| {
         if cache_exists {
-            ProviderQuota::action_required(PROVIDER, "Open Claude Code and sign in again.")
+            ProviderQuota::action_required(PROVIDER, "打开 Claude Code 并重新登录。")
         } else {
-            ProviderQuota::not_configured(PROVIDER, "Run Claude Code and sign in to add Claude.")
+            ProviderQuota::not_configured(PROVIDER, "运行 Claude Code 并登录，即可添加 Claude。")
         }
     })
 }
@@ -636,10 +636,10 @@ async fn plan(token: &str) -> Option<String> {
 
 pub async fn fetch() -> ProviderQuota {
     let Some(path) = credentials_path() else {
-        return ProviderQuota::error(PROVIDER, "could not locate the home directory");
+        return ProviderQuota::error(PROVIDER, "找不到用户主目录");
     };
     if matches!(path.try_exists(), Ok(false)) {
-        let reason = "Claude Code's local sign-in is missing.";
+        let reason = "Claude Code 的本地登录信息不见了。";
         let cache_exists =
             usage_cache_path().is_some_and(|path| matches!(path.try_exists(), Ok(true)));
         return signed_out_quota(cached_quota(reason), cache_exists);
@@ -668,7 +668,7 @@ pub async fn fetch() -> ProviderQuota {
     }
 
     if request_floor_remaining(&rate_limit_state, current_time).is_some() {
-        if let Some(quota) = cached_quota("waiting for the next scheduled Claude check") {
+        if let Some(quota) = cached_quota("等待下一次定时的 Claude 查询") {
             return quota;
         }
     }
@@ -714,7 +714,7 @@ async fn try_fetch() -> Result<(ProviderQuota, i64), FetchError> {
         return Err(FetchError::auth_rejected());
     }
     let client = claude_client()
-        .map_err(|error| FetchError::plain(format!("could not build HTTP client: {error}")))?;
+        .map_err(|error| FetchError::plain(format!("无法创建 HTTP 客户端：{error}")))?;
     // First use scans the CLI on disk for its version — child processes and
     // sleeps. Off the async runtime, same as refresh_access_token below.
     let user_agent = tauri::async_runtime::spawn_blocking(claude_user_agent)
@@ -726,7 +726,7 @@ async fn try_fetch() -> Result<(ProviderQuota, i64), FetchError> {
             .send()
             .await
             .map_err(|error| {
-                FetchError::plain(format!("request to the usage endpoint failed: {error}"))
+                FetchError::plain(format!("请求用量接口失败：{error}"))
             })?;
 
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
@@ -762,7 +762,7 @@ async fn try_fetch() -> Result<(ProviderQuota, i64), FetchError> {
                 .get(reqwest::header::RETRY_AFTER)
                 .and_then(|value| value.to_str().ok())
                 .and_then(|value| value.parse::<u64>().ok());
-            let message = http_failure(status, "the Claude usage endpoint");
+            let message = http_failure(status, "Claude 用量接口");
             let kind = crate::claude_diagnostics::response(response).await;
             if kind == "authentication_error" {
                 return Err(FetchError::auth_rejected());
@@ -778,7 +778,7 @@ async fn try_fetch() -> Result<(ProviderQuota, i64), FetchError> {
             "event": "usage_response", "status": response.status().as_u16(),
         }));
         break response.json().await.map_err(|error| {
-            FetchError::plain(format!("could not parse the usage response: {error}"))
+            FetchError::plain(format!("无法解析用量接口的返回：{error}"))
         })?;
     };
 
@@ -787,7 +787,7 @@ async fn try_fetch() -> Result<(ProviderQuota, i64), FetchError> {
         return Ok((
             ProviderQuota::unavailable(
                 PROVIDER,
-                "Signed in, but this plan reports no usage limits.",
+                "已登录，但这个套餐没有用量限制。",
             ),
             request_generation,
         ));
@@ -859,7 +859,7 @@ mod tests {
     #[test]
     fn repeated_rate_limits_suggest_but_do_not_assert_expiry() {
         assert!(!rate_limit_message(1).contains("/login"));
-        assert!(rate_limit_message(3).contains("if sign-in has expired"));
+        assert!(rate_limit_message(3).contains("如果登录已过期"));
         assert!(FetchError::auth_rejected().auth_required);
         assert!(!FetchError::rate_limited("429".into(), None, 1).auth_required);
     }
@@ -922,7 +922,7 @@ mod tests {
                 severity: None,
             }],
             Stale {
-                source: "last successful Claude check".to_string(),
+                source: "上次成功的 Claude 查询".to_string(),
                 observed_at: Some(1_000),
                 reason: "signed out".to_string(),
             },

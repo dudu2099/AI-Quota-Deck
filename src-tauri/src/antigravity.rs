@@ -93,11 +93,11 @@ impl Failure {
     fn message(&self) -> String {
         match self {
             Self::Transport(error) => {
-                format!("request to the Antigravity language server failed: {error}")
+                format!("请求 Antigravity 语言服务器失败：{error}")
             }
-            Self::Unsupported => "the Antigravity language server has no quota summary".to_string(),
-            Self::Http(status) => http_failure(*status, "the Antigravity language server"),
-            Self::Shape(error) => format!("could not parse the Antigravity quota summary: {error}"),
+            Self::Unsupported => "Antigravity 语言服务器没有提供额度汇总".to_string(),
+            Self::Http(status) => http_failure(*status, "Antigravity 语言服务器"),
+            Self::Shape(error) => format!("无法解析 Antigravity 额度汇总：{error}"),
         }
     }
 }
@@ -543,7 +543,7 @@ fn local_client() -> Result<reqwest::Client, String> {
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECONDS))
         .build()
-        .map_err(|error| format!("could not build HTTP client: {error}"))
+        .map_err(|error| format!("无法创建 HTTP 客户端：{error}"))
 }
 
 fn rpc_url(port: u16, rpc: &str) -> String {
@@ -725,7 +725,7 @@ fn windows_from(summary: &Summary) -> Vec<QuotaWindow> {
 fn no_model_quota() -> ProviderQuota {
     ProviderQuota::unavailable(
         PROVIDER,
-        "Signed in to Antigravity, but this account reports no model quota.",
+        "已登录 Antigravity，但这个账号没有任何模型额度。",
     )
 }
 
@@ -784,7 +784,7 @@ fn cached_quota_from_raw(raw: &str, current_time: i64, reason: &str) -> Option<P
         snapshot.plan,
         snapshot.windows,
         Stale {
-            source: "last Antigravity IDE check".to_string(),
+            source: "上次 Antigravity IDE 查询".to_string(),
             observed_at: Some(snapshot.observed_at),
             reason: reason.to_string(),
         },
@@ -805,22 +805,22 @@ fn fallback(reason: &str) -> ProviderQuota {
 pub async fn fetch() -> ProviderQuota {
     match tokio::time::timeout(Duration::from_secs(FETCH_DEADLINE_SECONDS), try_fetch()).await {
         Ok(quota) => quota,
-        Err(_) => fallback("the Antigravity IDE did not answer in time"),
+        Err(_) => fallback("Antigravity IDE 没有及时响应"),
     }
 }
 
 /// No language server is running, so there is nothing to ask. A snapshot the
 /// deck wrote earlier is the only evidence this provider was ever in use.
 fn idle_quota() -> ProviderQuota {
-    if let Some(quota) = cached_quota("Antigravity IDE is not running.") {
+    if let Some(quota) = cached_quota("Antigravity IDE 没在运行。") {
         return quota;
     }
     if snapshot_exists() {
-        ProviderQuota::action_required(PROVIDER, "Open Antigravity IDE to refresh its quota.")
+        ProviderQuota::action_required(PROVIDER, "打开 Antigravity IDE 才能刷新额度。")
     } else {
         ProviderQuota::not_configured(
             PROVIDER,
-            "Install Google Antigravity IDE and sign in once to add Antigravity.",
+            "安装 Google Antigravity IDE 并登录一次，就能添加 Antigravity。",
         )
     }
 }
@@ -834,7 +834,7 @@ async fn try_fetch() -> ProviderQuota {
         // A server that is running but cannot be inspected is not an absent
         // one, and telling the user to install the IDE would be wrong.
         return if unreadable {
-            fallback("cannot inspect the Antigravity language server; if the IDE runs as administrator, start it normally")
+            fallback("无法检查 Antigravity 语言服务器；如果 IDE 是以管理员身份运行的，请改为正常启动")
         } else {
             idle_quota()
         };
@@ -861,11 +861,11 @@ async fn try_fetch() -> ProviderQuota {
     if unsupported {
         return ProviderQuota::action_required(
             PROVIDER,
-            "This version of AI Quota Deck needs a newer Antigravity IDE to read its quota summary.",
+            "这个版本的 AI Quota Deck 需要更新版的 Antigravity IDE 才能读取额度汇总。",
         );
     }
     let reason = last_failure.map_or_else(
-        || "the Antigravity language server is not listening on any port".to_string(),
+        || "Antigravity 语言服务器没有在任何端口上监听".to_string(),
         |failure| failure.message(),
     );
     fallback(&reason)
@@ -1307,7 +1307,7 @@ mod tests {
             windows: cached,
             stale: Some(stale),
             ..
-        } = cached_quota_from_raw(&raw, 1_787_500_600, "Antigravity IDE is not running.").unwrap()
+        } = cached_quota_from_raw(&raw, 1_787_500_600, "Antigravity IDE 没在运行。").unwrap()
         else {
             panic!("a recent snapshot should stay visible as cached");
         };
@@ -1317,7 +1317,7 @@ mod tests {
         assert_eq!(cached[0].percent, windows[0].percent);
         assert_eq!(cached[0].resets_at, windows[0].resets_at);
         assert_eq!(stale.observed_at, Some(1_787_500_000));
-        assert_eq!(stale.source, "last Antigravity IDE check");
+        assert_eq!(stale.source, "上次 Antigravity IDE 查询");
 
         // At the weekly deadline that row goes (the snapshot is still within a
         // day); the placeholder-free rows have no deadline and stay until the

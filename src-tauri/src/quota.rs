@@ -222,9 +222,9 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// think their account is throttled.
 pub fn http_failure(status: reqwest::StatusCode, subject: &str) -> String {
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        format!("{subject} is rate limiting these checks — the deck will slow down.")
+        format!("{subject}正在限制查询频率，本程序会放慢查询。")
     } else {
-        format!("{subject} returned {status}")
+        format!("{subject}返回了 {status}")
     }
 }
 

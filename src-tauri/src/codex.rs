@@ -32,7 +32,7 @@ fn usage_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECONDS))
         .build()
-        .map_err(|e| format!("could not build HTTP client: {e}"))
+        .map_err(|e| format!("无法创建 HTTP 客户端：{e}"))
 }
 
 fn codex_home() -> Option<PathBuf> {
@@ -153,7 +153,7 @@ pub async fn fetch() -> ProviderQuota {
                 Some(quota) => quota,
                 None if auth_missing => ProviderQuota::not_configured(
                     PROVIDER,
-                    "Open the Codex app and sign in to add Codex.",
+                    "打开 Codex 应用并登录，即可添加 Codex。",
                 ),
                 None => ProviderQuota::error(PROVIDER, reason),
             }
@@ -178,35 +178,35 @@ fn cached_session_fallback(reason: &str) -> Option<ProviderQuota> {
 
 async fn live() -> Result<ProviderQuota, String> {
     let path = codex_home()
-        .ok_or("could not locate the home directory")?
+        .ok_or("找不到用户主目录")?
         .join("auth.json");
     let raw = std::fs::read_to_string(&path).map_err(|e| {
         format!(
-            "cannot read {} — is the Codex app installed and signed in? ({e})",
+            "无法读取 {}，Codex 应用装了并登录了吗？（{e}）",
             path.display()
         )
     })?;
     let auth: Auth =
-        serde_json::from_str(&raw).map_err(|e| format!("unexpected shape in auth.json: {e}"))?;
+        serde_json::from_str(&raw).map_err(|e| format!("auth.json 的格式不对：{e}"))?;
 
     let response = usage_client()?
         .get(USAGE_URL)
         .bearer_auth(&auth.tokens.access_token)
         .send()
         .await
-        .map_err(|e| format!("request to the usage endpoint failed: {e}"))?;
+        .map_err(|e| format!("请求用量接口失败：{e}"))?;
 
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err("token rejected — open the Codex app once so it can refresh".into());
+        return Err("令牌被拒绝，打开一次 Codex 应用让它刷新".into());
     }
     if !response.status().is_success() {
-        return Err(http_failure(response.status(), "the Codex usage endpoint"));
+        return Err(http_failure(response.status(), "Codex 用量接口"));
     }
 
     let body: UsageResponse = response
         .json()
         .await
-        .map_err(|e| format!("could not parse the usage response: {e}"))?;
+        .map_err(|e| format!("无法解析用量接口的返回：{e}"))?;
 
     let windows = windows_from(&body.rate_limit);
 
@@ -216,7 +216,7 @@ async fn live() -> Result<ProviderQuota, String> {
         // show a quota that no longer applies.
         return Ok(ProviderQuota::unavailable(
             PROVIDER,
-            "Signed in, but this plan reports no usage window.",
+            "已登录，但这个套餐没有用量窗口。",
         ));
     }
 
@@ -238,7 +238,7 @@ fn windows_from(rate_limit: &RateLimit) -> Vec<QuotaWindow> {
             label: w
                 .limit_window_seconds
                 .map(|seconds| label_for_window_minutes(seconds / 60.0))
-                .unwrap_or_else(|| "Usage".to_string()),
+                .unwrap_or_else(|| "用量".to_string()),
             percent: w.used_percent,
             resets_at: w.reset_at,
             window_seconds: w.limit_window_seconds.map(|s| s as i64),
@@ -262,7 +262,7 @@ fn from_session_logs(reason: &str) -> Option<ProviderQuota> {
             label: w
                 .window_minutes
                 .map(label_for_window_minutes)
-                .unwrap_or_else(|| "Usage".to_string()),
+                .unwrap_or_else(|| "用量".to_string()),
             percent: w.used_percent,
             resets_at: w.resets_at,
             window_seconds: w.window_minutes.map(|m| (m * 60.0) as i64),
@@ -279,7 +279,7 @@ fn from_session_logs(reason: &str) -> Option<ProviderQuota> {
         plan_label(snapshot.plan_type),
         windows,
         Stale {
-            source: "local Codex session log".to_string(),
+            source: "本地 Codex 会话记录".to_string(),
             observed_at,
             reason: reason.to_string(),
         },
@@ -492,7 +492,7 @@ mod tests {
         let stale = stale.expect("fallback data must be flagged stale");
         assert_eq!(stale.observed_at, Some(1767225900));
         assert_eq!(stale.reason, "token missing");
-        assert!(stale.source.contains("session log"));
+        assert!(stale.source.contains("会话记录"));
 
         let _ = std::fs::remove_dir_all(&home);
     }

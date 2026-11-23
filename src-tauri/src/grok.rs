@@ -33,7 +33,7 @@ fn usage_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECONDS))
         .build()
-        .map_err(|e| format!("could not build HTTP client: {e}"))
+        .map_err(|e| format!("无法创建 HTTP 客户端：{e}"))
 }
 
 fn base_url() -> String {
@@ -139,7 +139,7 @@ fn period_label(raw: &str) -> String {
     let mut chars = name.chars();
     match chars.next() {
         Some(first) => first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase(),
-        None => "Usage".to_string(),
+        None => "用量".to_string(),
     }
 }
 
@@ -190,7 +190,7 @@ pub async fn fetch() -> ProviderQuota {
     let cli_quota = if auth_missing {
         ProviderQuota::not_configured(
             PROVIDER,
-            "Install the optional Browser Bridge or sign in with Grok Build to add Grok.",
+            "安装可选的 Browser Bridge 扩展，或用 Grok Build 登录，即可添加 Grok。",
         )
     } else {
         match try_fetch().await {
@@ -215,23 +215,23 @@ pub async fn fetch() -> ProviderQuota {
     if browser_configured && matches!(cli_quota, ProviderQuota::NotConfigured { .. }) {
         return ProviderQuota::action_required(
             PROVIDER,
-            "Open Grok in a browser so the optional Browser Bridge can update this card.",
+            "在浏览器里打开 Grok，让可选的 Browser Bridge 扩展更新这张卡片。",
         );
     }
     cli_quota
 }
 
 async fn try_fetch() -> Result<ProviderQuota, String> {
-    let path = auth_path().ok_or("could not locate the home directory")?;
+    let path = auth_path().ok_or("找不到用户主目录")?;
     let raw = std::fs::read_to_string(&path).map_err(|e| {
         format!(
-            "cannot read {} — is Grok Build installed and signed in? ({e})",
+            "无法读取 {}，Grok Build 装了并登录了吗？（{e}）",
             path.display()
         )
     })?;
     let entries: HashMap<String, AuthEntry> =
-        serde_json::from_str(&raw).map_err(|e| format!("unexpected shape in auth.json: {e}"))?;
-    let credential = newest_credential(entries, now()).ok_or("auth.json held no credentials")?;
+        serde_json::from_str(&raw).map_err(|e| format!("auth.json 的格式不对：{e}"))?;
+    let credential = newest_credential(entries, now()).ok_or("auth.json 里没有凭据")?;
 
     if credential
         .expires_at
@@ -247,7 +247,7 @@ async fn try_fetch() -> Result<ProviderQuota, String> {
         .bearer_auth(&credential.key)
         .send()
         .await
-        .map_err(|e| format!("request to the billing endpoint failed: {e}"))?;
+        .map_err(|e| format!("请求计费接口失败：{e}"))?;
 
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         // Grok's token lives about six hours — far shorter than Claude's or
@@ -256,13 +256,13 @@ async fn try_fetch() -> Result<ProviderQuota, String> {
         return Ok(expired_token());
     }
     if !response.status().is_success() {
-        return Err(http_failure(response.status(), "the Grok billing endpoint"));
+        return Err(http_failure(response.status(), "Grok 计费接口"));
     }
 
     let body: BillingResponse = response
         .json()
         .await
-        .map_err(|e| format!("could not parse the billing response: {e}"))?;
+        .map_err(|e| format!("无法解析计费接口的返回：{e}"))?;
 
     let Some(percent) = body.config.credit_usage_percent else {
         // Reported by the account owner, not measured here: free Grok has no
@@ -270,8 +270,8 @@ async fn try_fetch() -> Result<ProviderQuota, String> {
         // does not cover.
         return Ok(ProviderQuota::unavailable(
             PROVIDER,
-            "No subscription quota on this account. Free Grok is metered by daily queries, \
-             which this endpoint does not report.",
+            "这个账号没有订阅额度。免费版 Grok 按每日提问次数计量，\
+             这个接口不提供该数据。",
         ));
     };
 
@@ -286,7 +286,7 @@ async fn try_fetch() -> Result<ProviderQuota, String> {
         label: period
             .and_then(|p| p.kind.as_deref())
             .map(period_label)
-            .unwrap_or_else(|| "Usage".to_string()),
+            .unwrap_or_else(|| "用量".to_string()),
         percent,
         resets_at: ends_at,
         // Grok gives both ends of the period, so the duration is exact rather
@@ -350,7 +350,7 @@ fn browser_quota_from_cache(
     }
 
     let stale = stale_reason.map(|reason| Stale {
-        source: "Grok browser extension".to_string(),
+        source: "Grok 浏览器扩展".to_string(),
         observed_at: Some(cache.observed_at),
         reason,
     });
@@ -402,7 +402,7 @@ fn browser_quota_from_cache(
         .map(|bucket| {
             let label = match (bucket.remaining, bucket.total) {
                 (Some(remaining), Some(total)) => {
-                    format!("{} · {remaining} / {total} left", bucket.label)
+                    format!("{} · 剩余 {remaining} / {total}", bucket.label)
                 }
                 _ => bucket.label,
             };
@@ -431,7 +431,7 @@ fn browser_quota_from_cache(
 fn expired_token() -> ProviderQuota {
     ProviderQuota::action_required(
         PROVIDER,
-        "Open Grok Build once so it can refresh its sign-in, then refresh this card.",
+        "打开一次 Grok Build 让它刷新登录，然后刷新这张卡片。",
     )
 }
 
@@ -532,7 +532,7 @@ mod tests {
         let ProviderQuota::ActionRequired { message, .. } = expired_token() else {
             panic!("expired Grok credentials must not be a retryable error");
         };
-        assert!(message.contains("Open Grok Build once"));
+        assert!(message.contains("打开一次 Grok Build"));
     }
 
     #[test]
@@ -611,7 +611,7 @@ mod tests {
             panic!("free browser data must produce a quota card");
         };
         assert_eq!(plan.as_deref(), Some("Free"));
-        assert_eq!(windows[0].label, "Fast · 30 / 40 left");
+        assert_eq!(windows[0].label, "Fast · 剩余 30 / 40");
         assert_eq!(windows[0].percent, 25.0);
     }
 

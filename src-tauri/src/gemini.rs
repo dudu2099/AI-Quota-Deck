@@ -40,7 +40,7 @@ pub async fn fetch() -> ProviderQuota {
         Err(_) if matches!(native_host::cache_exists(PROVIDER), Ok(false)) => {
             return ProviderQuota::not_configured(
                 PROVIDER,
-                "Install the optional Browser Bridge to add Gemini.",
+                "安装可选的 Browser Bridge 扩展，即可添加 Gemini。",
             );
         }
         Err(_) => return needs_browser(),
@@ -98,7 +98,7 @@ fn browser_quota_from_cache(raw: &str, current_time: i64) -> Option<ProviderQuot
     let plan = Some(match cache.payload.tier {
         Some(1) => "Free".to_string(),
         Some(2) => "AI Pro".to_string(),
-        _ => format!("Account {account_number}"),
+        _ => format!("账号 {account_number}"),
     });
     if age <= FRESH_MAX_AGE_SECONDS {
         Some(ProviderQuota::ok(PROVIDER, plan, windows))
@@ -108,9 +108,9 @@ fn browser_quota_from_cache(raw: &str, current_time: i64) -> Option<ProviderQuot
             plan,
             windows,
             Stale {
-                source: "Gemini browser extension".to_string(),
+                source: "Gemini 浏览器扩展".to_string(),
                 observed_at: Some(cache.observed_at),
-                reason: "No recent Gemini browser push is available.".to_string(),
+                reason: "最近没有收到 Gemini 浏览器推送的数据。".to_string(),
             },
         ))
     }
@@ -142,7 +142,7 @@ fn add_window(
 fn needs_browser() -> ProviderQuota {
     ProviderQuota::action_required(
         PROVIDER,
-        "Open Gemini in a browser once so its extension can update this card.",
+        "在浏览器里打开一次 Gemini，让扩展更新这张卡片。",
     )
 }
 
@@ -244,6 +244,6 @@ mod tests {
         let ProviderQuota::Ok { plan, .. } = browser_quota_from_cache(&raw, 1100).unwrap() else {
             panic!("unknown tier should still produce a quota card");
         };
-        assert_eq!(plan.as_deref(), Some("Account 4"));
+        assert_eq!(plan.as_deref(), Some("账号 4"));
     }
 }

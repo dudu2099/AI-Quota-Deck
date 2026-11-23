@@ -45,28 +45,28 @@ function duration(seconds) {
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
-  if (days) return `${days}d ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  if (minutes) return `${minutes}m`;
-  return `${Math.max(0, seconds)}s`;
+  if (days) return `${days}天${hours}小时`;
+  if (hours) return `${hours}小时${minutes}分钟`;
+  if (minutes) return `${minutes}分钟`;
+  return `${Math.max(0, seconds)}秒`;
 }
 
 function age(timestampMs) {
-  if (!timestampMs) return "Waiting for data";
+  if (!timestampMs) return "等待数据";
   const seconds = Math.max(0, Math.floor((Date.now() - timestampMs) / 1_000));
-  if (seconds < 60) return "Updated just now";
-  return `Updated ${duration(seconds)} ago`;
+  if (seconds < 60) return "刚刚更新";
+  return `${duration(seconds)}前更新`;
 }
 
 function staleDetails(providerId, quota) {
   if (!quota?.stale) return null;
-  const details = ["Cached data"];
+  const details = ["缓存数据"];
   if (quota.stale.observed_at) {
-    details[0] = `Cached · ${duration(Math.max(0, nowSec() - quota.stale.observed_at))} old`;
+    details[0] = `缓存 · ${duration(Math.max(0, nowSec() - quota.stale.observed_at))}前`;
   }
   if (quota.stale.reason) details.push(quota.stale.reason);
   const waitMs = (snapshot.backoffUntil[providerId] ?? 0) - Date.now();
-  if (waitMs > 0) details.push(`Retrying in ${duration(Math.ceil(waitMs / 1_000))}`);
+  if (waitMs > 0) details.push(`${duration(Math.ceil(waitMs / 1_000))}后重试`);
   return details.join(" · ");
 }
 
@@ -76,10 +76,10 @@ function renderMetric(window_) {
   const displayLabel = usageDisplayLabel(preferences.usage_display);
   const reset = window_.resets_at
     ? window_.resets_at > nowSec()
-      ? ` · Resets in ${duration(window_.resets_at - nowSec())}`
-      : " · Resetting now"
+      ? ` · ${duration(window_.resets_at - nowSec())}后重置`
+      : " · 正在重置"
     : "";
-  metric.title = `${window_.label}: ${Math.round(percent)}% ${displayLabel}${reset}`;
+  metric.title = `${window_.label}：${Math.round(percent)}% ${displayLabel}${reset}`;
   metric.append(
     el("span", "metric-period", compactWindowLabel(window_)),
     el("span", "metric-value", `${Math.round(percent)}%`),
@@ -96,7 +96,7 @@ function renderProvider(provider, quota) {
 
   const stale = staleDetails(provider.id, quota);
   if (stale) {
-    const cached = el("span", "cached-label", "cached");
+    const cached = el("span", "cached-label", "缓存");
     cached.title = stale;
     identity.append(cached);
     row.title = stale;
@@ -115,7 +115,7 @@ function renderProvider(provider, quota) {
     const windows = widgetWindows(provider.id, quota.windows);
     if (!windows.length) {
       const missing = el("span", "widget-metric unavailable");
-      missing.title = `${provider.name} does not report a 7-day quota.`;
+      missing.title = `${provider.name} 不提供 7 天额度。`;
       missing.append(el("span", "metric-period", "7d"), el("span", "metric-value", "—"));
       metrics.append(missing);
     } else {
@@ -232,7 +232,7 @@ function render() {
   providersEl.replaceChildren(
     ...(configured.length
       ? configured.map((provider) => renderProvider(provider, snapshot.results[provider.id]))
-      : [el("p", "widget-empty", allHidden ? "All providers hidden" : "No providers detected")]),
+      : [el("p", "widget-empty", allHidden ? "已隐藏全部来源" : "没有检测到任何来源")]),
   );
   statusEl.textContent = age(snapshot.updatedAt);
   scheduleResize();
@@ -245,19 +245,19 @@ function applyPreferences(next) {
   document.documentElement.dataset.taskbarOverlay = preferences.taskbar_overlay.toString();
   widgetEl.setAttribute(
     "aria-label",
-    preferences.strip ? "AI quota strip" : "AI quota widget",
+    preferences.strip ? "AI 额度长条" : "AI 额度小窗",
   );
-  lockWidgetEl.title = preferences.locked ? "Unlock widget position" : "Lock widget position";
+  lockWidgetEl.title = preferences.locked ? "解锁小窗位置" : "锁定小窗位置";
   lockWidgetEl.setAttribute(
     "aria-label",
-    preferences.locked ? "Unlock widget position" : "Lock widget position",
+    preferences.locked ? "解锁小窗位置" : "锁定小窗位置",
   );
   taskbarOverlayEl.title = preferences.taskbar_overlay
-    ? "Stop keeping the strip above the taskbar"
-    : "Keep strip above the taskbar";
+    ? "不再让长条停在任务栏上方"
+    : "让长条停在任务栏上方";
   taskbarOverlayEl.setAttribute("aria-label", taskbarOverlayEl.title);
   taskbarOverlayEl.setAttribute("aria-pressed", preferences.taskbar_overlay.toString());
-  hideWidgetEl.title = preferences.strip ? "Hide strip" : "Hide widget";
+  hideWidgetEl.title = preferences.strip ? "隐藏长条" : "隐藏小窗";
   hideWidgetEl.setAttribute("aria-label", hideWidgetEl.title);
   render();
 }
@@ -293,7 +293,7 @@ taskbarOverlayEl.addEventListener("click", () => {
   void invoke("set_taskbar_overlay", { enabled: !preferences.taskbar_overlay })
     .then(applyPreferences)
     .catch((error) => {
-      taskbarOverlayEl.title = `Could not change taskbar overlay: ${error}`;
+      taskbarOverlayEl.title = `无法切换任务栏置顶：${error}`;
     });
 });
 

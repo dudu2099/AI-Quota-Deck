@@ -254,7 +254,7 @@ fn toggle_dashboard(app: &AppHandle) {
 
 #[cfg(desktop)]
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open dashboard", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "打开主面板", true, None::<&str>)?;
     let widget_preferences = app
         .state::<widget::WidgetState>()
         .snapshot()
@@ -264,7 +264,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_widget = CheckMenuItem::with_id(
         app,
         "show-widget",
-        "Show widget",
+        "显示小窗",
         true,
         widget_visible,
         None::<&str>,
@@ -272,7 +272,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_strip = CheckMenuItem::with_id(
         app,
         "show-strip",
-        "Show strip",
+        "显示长条",
         true,
         strip_visible,
         None::<&str>,
@@ -280,7 +280,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let widget_locked = CheckMenuItem::with_id(
         app,
         "widget-locked",
-        "Lock widget position",
+        "锁定小窗位置",
         true,
         widget_preferences.locked,
         None::<&str>,
@@ -288,12 +288,12 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let launch_at_startup = CheckMenuItem::with_id(
         app,
         "launch-at-startup",
-        "Launch at startup",
+        "开机自启动",
         true,
         startup::enabled(),
         None::<&str>,
     )?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[

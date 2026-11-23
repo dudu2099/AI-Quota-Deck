@@ -18,7 +18,7 @@ const PROVIDERS = [
     id: "claude",
     name: "Claude",
     command: "claude_quota",
-    setup: "Run Claude Code and sign in once.",
+    setup: "运行 Claude Code 并登录一次。",
     // Claude's undocumented endpoint is more sensitive than the other sources.
     // Poll conservatively while active; the 429 cooldown itself is owned by the
     // Rust side (claude-rate-limit.json) and arrives as retry_after_seconds.
@@ -29,26 +29,26 @@ const PROVIDERS = [
     id: "codex",
     name: "Codex",
     command: "codex_quota",
-    setup: "Open the Codex app and sign in once.",
+    setup: "打开 Codex 应用并登录一次。",
   },
   {
     id: "antigravity",
     name: "Antigravity",
     command: "antigravity_quota",
-    setup: "Install Google Antigravity IDE, sign in, and keep the IDE open while the deck reads its quota.",
+    setup: "安装 Google Antigravity IDE 并登录；读取额度时要保持 IDE 打开。",
   },
   {
     id: "gemini",
     name: "Gemini",
     command: "gemini_quota",
-    setup: "Install the optional Browser Bridge, open Gemini, then click the extension icon once.",
+    setup: "安装可选的 Browser Bridge 扩展，打开 Gemini，再点一次扩展图标。",
     optional: true,
   },
   {
     id: "grok",
     name: "Grok",
     command: "grok_quota",
-    setup: "Install the optional Browser Bridge (recommended), or sign in with Grok Build.",
+    setup: "安装可选的 Browser Bridge 扩展（推荐），或用 Grok Build 登录。",
     optional: true,
   },
   {
@@ -56,7 +56,7 @@ const PROVIDERS = [
     name: "Grok Bot",
     mark: "GB",
     command: "grok_bot_quota",
-    setup: "Install the Grok Bot desktop app and sign in once.",
+    setup: "安装 Grok Bot 桌面应用并登录一次。",
   },
 ];
 
@@ -137,15 +137,15 @@ function applyWidgetPreferences(preferences) {
   const stripActive = widgetPreferences.visible && widgetPreferences.strip;
   widgetModeEl.setAttribute("aria-pressed", widgetActive.toString());
   stripModeEl.setAttribute("aria-pressed", stripActive.toString());
-  widgetModeEl.title = widgetActive ? "Return to dashboard" : "Show desktop widget";
-  stripModeEl.title = stripActive ? "Return to dashboard" : "Show strip";
+  widgetModeEl.title = widgetActive ? "返回主面板" : "显示桌面小窗";
+  stripModeEl.title = stripActive ? "返回主面板" : "显示长条";
 }
 
 async function setDisplayMode(mode, source) {
   try {
     applyWidgetPreferences(await invoke("set_display_mode", { mode }));
   } catch (error) {
-    source.title = `Could not change display mode: ${error}`;
+    source.title = `无法切换显示模式：${error}`;
   }
 }
 
@@ -165,35 +165,35 @@ function duration(seconds) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (days) return `${days}d ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  if (minutes) return `${minutes}m`;
-  return `${seconds}s`;
+  if (days) return `${days}天${hours}小时`;
+  if (hours) return `${hours}小时${minutes}分钟`;
+  if (minutes) return `${minutes}分钟`;
+  return `${seconds}秒`;
 }
 
 function untilReset(resetsAt) {
   if (!resetsAt) return null;
   const left = resetsAt - nowSec();
-  return left <= 0 ? "Resetting now" : `Resets in ${duration(left)}`;
+  return left <= 0 ? "正在重置" : `${duration(left)}后重置`;
 }
 
 function ago(unixSeconds) {
   const past = nowSec() - unixSeconds;
-  return past < 60 ? "just now" : `${duration(past)} ago`;
+  return past < 60 ? "刚刚" : `${duration(past)}前`;
 }
 
 function updateAge(date) {
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return "刚刚";
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return `${minutes}分钟前`;
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hr ago`;
+  if (hours < 24) return `${hours}小时前`;
 
   const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  return `${days}天前`;
 }
 
 /** The provider's own severity wins where it offers one — it knows what "close
@@ -258,7 +258,7 @@ function renderWindow(window_) {
     const note = el("p", "row-note", reset);
     if (pace !== null && window_.percent > pace + PACE_TOLERANCE) {
       note.append(document.createTextNode(" · "));
-      note.append(el("span", "ahead", "ahead of pace"));
+      note.append(el("span", "ahead", "消耗偏快"));
     }
     row.append(note);
   }
@@ -276,12 +276,12 @@ function renderProvider(provider, quota) {
     head.append(el("span", "plan", quota.plan));
   }
   if (quota?.status === "ok" && quota.stale) {
-    head.append(el("span", "badge", "cached"));
+    head.append(el("span", "badge", "缓存"));
   }
   section.append(head);
 
   if (!quota) {
-    section.append(el("p", "note", "Reading…"));
+    section.append(el("p", "note", "读取中…"));
     return section;
   }
 
@@ -306,7 +306,7 @@ function renderProvider(provider, quota) {
     // which, or the card looks stuck.
     const waitMs = slot(provider.id).backoffUntil - Date.now();
     if (waitMs > 0) {
-      note.append(document.createTextNode(` Retrying in ${duration(Math.ceil(waitMs / 1000))}.`));
+      note.append(document.createTextNode(`（${duration(Math.ceil(waitMs / 1000))}后重试）`));
     }
     section.append(note);
     return section;
@@ -327,14 +327,14 @@ function renderProvider(provider, quota) {
   }
 
   if (quota.stale) {
-    const when = quota.stale.observed_at ? ago(quota.stale.observed_at) : "unknown age";
-    const note = el("p", "note stale", `From ${quota.stale.source} · ${when}`);
+    const when = quota.stale.observed_at ? ago(quota.stale.observed_at) : "时间未知";
+    const note = el("p", "note stale", `来自${quota.stale.source} · ${when}`);
     if (quota.stale.reason) {
       note.append(document.createElement("br"), document.createTextNode(quota.stale.reason));
       const waitMs = slot(provider.id).backoffUntil - Date.now();
       if (waitMs > 0) {
         note.append(
-          document.createTextNode(` Retrying in ${duration(Math.ceil(waitMs / 1000))}.`),
+          document.createTextNode(`（${duration(Math.ceil(waitMs / 1000))}后重试）`),
         );
       }
     }
@@ -347,18 +347,18 @@ function renderProvider(provider, quota) {
 function renderEmptyState(checked, allHidden) {
   const section = el("section", "provider-empty");
   if (allHidden) {
-    section.append(el("h2", null, "All providers hidden"));
-    section.append(el("p", null, "Use AI sources above to bring a provider back."));
+    section.append(el("h2", null, "已隐藏全部来源"));
+    section.append(el("p", null, "在上方「AI 来源与显示」里可以重新打开。"));
     return section;
   }
-  section.append(el("h2", null, checked ? "No providers detected" : "Checking for providers…"));
+  section.append(el("h2", null, checked ? "没有检测到任何来源" : "正在检测来源…"));
   section.append(
     el(
       "p",
       null,
       checked
-        ? "Run Claude Code, Codex, or Antigravity IDE once, or set up the optional Browser Bridge for Gemini and Grok."
-        : "Looking for existing Claude Code, Codex, Antigravity, Gemini, and Grok sign-ins.",
+        ? "先运行一次 Claude Code、Codex 或 Antigravity IDE，或为 Gemini 和 Grok 安装可选的 Browser Bridge 扩展。"
+        : "正在查找 Claude Code、Codex、Antigravity、Gemini 和 Grok 已有的登录。",
     ),
   );
   return section;
@@ -368,14 +368,14 @@ function renderProviderControls(missingProviders) {
   providerControlsEl.replaceChildren();
 
   const activeIds = new Set(activeProviders().map(({ id }) => id));
-  const displayName = widgetPreferences.usage_display === "remaining" ? "Remaining" : "Used";
+  const displayName = widgetPreferences.usage_display === "remaining" ? "剩余" : "已用";
   const button = el("button", "sources-trigger");
   button.type = "button";
   button.setAttribute("aria-expanded", sourcesExpanded.toString());
   button.setAttribute("aria-controls", "source-picker");
   button.setAttribute(
     "aria-label",
-    `Choose AI sources and quota display. ${activeIds.size} of ${PROVIDERS.length} shown; values show ${displayName.toLowerCase()}.`,
+    `选择 AI 来源和额度显示方式。已显示 ${activeIds.size}/${PROVIDERS.length} 个来源，数值显示${displayName}额度。`,
   );
 
   const orbit = el("span", "source-orbit");
@@ -389,11 +389,11 @@ function renderProviderControls(missingProviders) {
 
   const copy = el("span", "sources-trigger-copy");
   copy.append(
-    el("span", "sources-trigger-label", "AI sources & display"),
+    el("span", "sources-trigger-label", "AI 来源与显示"),
     el(
       "span",
       "sources-trigger-meta",
-      `${activeIds.size} of ${PROVIDERS.length} shown · ${displayName}`,
+      `已显示 ${activeIds.size}/${PROVIDERS.length} · ${displayName}`,
     ),
   );
   button.append(orbit, copy, el("span", "sources-chevron"));
@@ -412,8 +412,8 @@ function renderProviderControls(missingProviders) {
   panel.id = "source-picker";
   const heading = el("div", "source-picker-head");
   heading.append(
-    el("strong", null, "Displayed providers"),
-    el("span", null, "Hidden sources are not polled."),
+    el("strong", null, "显示的来源"),
+    el("span", null, "隐藏的来源不会去查询。"),
   );
   panel.append(heading);
 
@@ -430,7 +430,7 @@ function renderProviderControls(missingProviders) {
 
     const details = el("span", "source-copy");
     const name = el("span", "source-name", provider.name);
-    if (provider.optional) name.append(el("span", "source-optional", "Bridge"));
+    if (provider.optional) name.append(el("span", "source-optional", "扩展"));
     details.append(name, el("span", "source-status", providerStatus(provider, visible)));
 
     const toggle = el("span", "source-toggle");
@@ -438,7 +438,7 @@ function renderProviderControls(missingProviders) {
     checkbox.type = "checkbox";
     checkbox.checked = visible;
     checkbox.dataset.provider = provider.id;
-    checkbox.setAttribute("aria-label", `Show ${provider.name}`);
+    checkbox.setAttribute("aria-label", `显示 ${provider.name}`);
     checkbox.addEventListener("change", () => {
       void setProviderHidden(provider, !checkbox.checked, checkbox);
     });
@@ -458,16 +458,16 @@ function renderUsageDisplay() {
   const row = el("div", "usage-display-option");
   const copy = el("span", "usage-display-copy");
   copy.append(
-    el("strong", null, "Quota values"),
-    el("span", null, "Choose consumed or available allowance."),
+    el("strong", null, "额度数值"),
+    el("span", null, "显示已用掉的额度，还是剩余的额度。"),
   );
 
   const choices = el("div", "usage-display-choices");
   choices.setAttribute("role", "radiogroup");
-  choices.setAttribute("aria-label", "Quota value display");
+  choices.setAttribute("aria-label", "额度数值显示方式");
   for (const [mode, label] of [
-    ["used", "Used"],
-    ["remaining", "Remaining"],
+    ["used", "已用"],
+    ["remaining", "剩余"],
   ]) {
     const choice = el("label", "usage-display-choice");
     const input = el("input");
@@ -495,7 +495,7 @@ async function setUsageDisplay(mode, input) {
       `[data-usage-display="${widgetPreferences.usage_display}"]`,
     );
     if (current) current.checked = true;
-    input.title = `Could not change quota display: ${error}`;
+    input.title = `无法切换额度显示：${error}`;
     input.focus();
     return;
   }
@@ -504,14 +504,14 @@ async function setUsageDisplay(mode, input) {
 }
 
 function providerStatus(provider, visible) {
-  if (!visible) return "Hidden · polling paused";
+  if (!visible) return "已隐藏 · 暂停查询";
   const quota = results[provider.id];
-  if (!quota) return "Checking connection…";
+  if (!quota) return "正在检查连接…";
   if (quota.status === "not_configured") return provider.setup;
-  if (quota.status === "error") return "Shown · retrying automatically";
-  if (quota.status === "action_required") return "Shown · needs attention";
-  if (quota.status === "unavailable") return "Shown · no quota available";
-  return "Shown on Dashboard, Widget & Strip";
+  if (quota.status === "error") return "已显示 · 正在自动重试";
+  if (quota.status === "action_required") return "已显示 · 需要处理";
+  if (quota.status === "unavailable") return "已显示 · 没有可用额度";
+  return "在主面板、小窗和长条中显示";
 }
 
 async function setProviderHidden(provider, hidden, checkbox) {
@@ -519,7 +519,7 @@ async function setProviderHidden(provider, hidden, checkbox) {
     applyWidgetPreferences(await invoke("set_provider_hidden", { id: provider.id, hidden }));
   } catch (error) {
     checkbox.checked = !hidden;
-    checkbox.title = `Could not change provider visibility: ${error}`;
+    checkbox.title = `无法切换来源显示：${error}`;
     return;
   }
   render();
@@ -545,33 +545,33 @@ function renderBridgeHelp() {
     el(
       "p",
       "bridge-step",
-      "Browser Bridge: open chrome://extensions, turn on Developer mode, " +
-        "click Load unpacked and pick this folder, then click the extension icon once.",
+      "Browser Bridge 扩展：打开 chrome://extensions，开启「开发者模式」，" +
+        "点「加载已解压的扩展程序」并选中这个文件夹，然后点一次扩展图标。",
     ),
     el("code", "bridge-path", bridgePath),
   );
 
-  const copy = el("button", "bridge-action", "Copy path");
+  const copy = el("button", "bridge-action", "复制路径");
   copy.type = "button";
   copy.addEventListener("click", async () => {
-    let label = "Copied";
+    let label = "已复制";
     try {
       await navigator.clipboard.writeText(bridgePath);
     } catch {
-      label = "Copy failed";
+      label = "复制失败";
     }
     copy.textContent = label;
-    setTimeout(() => (copy.textContent = "Copy path"), 1500);
+    setTimeout(() => (copy.textContent = "复制路径"), 1500);
   });
 
-  const open = el("button", "bridge-action", "Open folder");
+  const open = el("button", "bridge-action", "打开文件夹");
   open.type = "button";
   open.addEventListener("click", async () => {
     try {
       await invoke("reveal_bridge_dir");
     } catch {
-      open.textContent = "Could not open";
-      setTimeout(() => (open.textContent = "Open folder"), 1500);
+      open.textContent = "无法打开";
+      setTimeout(() => (open.textContent = "打开文件夹"), 1500);
     }
   });
 
@@ -708,7 +708,7 @@ async function fetchProvider(provider, { userAway = false } = {}) {
     // rather than blaming the vendor.
     results[provider.id] = {
       status: "error",
-      message: `The deck could not run its ${provider.name} check: ${error}`,
+      message: `本程序无法运行 ${provider.name} 查询：${error}`,
     };
   }
 
@@ -742,7 +742,7 @@ async function fetchProvider(provider, { userAway = false } = {}) {
 
 function updateRefreshStatus() {
   if (activeProviders().length === 0) {
-    updatedEl.textContent = "All providers hidden";
+    updatedEl.textContent = "已隐藏全部来源";
     countdownEl.textContent = "";
     return;
   }
@@ -751,34 +751,34 @@ function updateRefreshStatus() {
   const hasConfiguredProvider = configuredProviders().length > 0;
 
   if (checked && !hasConfiguredProvider) {
-    updatedEl.textContent = "Waiting for a provider";
+    updatedEl.textContent = "等待来源接入";
     if (inFlight) {
-      countdownEl.textContent = "Checking providers…";
+      countdownEl.textContent = "正在检查来源…";
       return;
     }
     if (!nextRefreshAt) {
-      countdownEl.textContent = "Provider check scheduled";
+      countdownEl.textContent = "已安排来源检查";
       return;
     }
     const seconds = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
-    countdownEl.textContent = `Checking again in ${duration(seconds)}`;
+    countdownEl.textContent = `${duration(seconds)}后再次检查`;
     return;
   }
 
   updatedEl.textContent = lastUpdatedAt
-    ? `Last updated: ${updateAge(lastUpdatedAt)}`
-    : "Last updated: —";
+    ? `更新于 ${updateAge(lastUpdatedAt)}`
+    : "更新于 —";
 
   if (inFlight) {
-    countdownEl.textContent = "Refreshing…";
+    countdownEl.textContent = "刷新中…";
     return;
   }
   if (!nextRefreshAt) {
-    countdownEl.textContent = "Refresh scheduled";
+    countdownEl.textContent = "已安排刷新";
     return;
   }
   const seconds = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
-  countdownEl.textContent = `Refresh in ${duration(seconds)}`;
+  countdownEl.textContent = `${duration(seconds)}后刷新`;
 }
 
 async function refresh(providers = activeProviders(), { markUpdated = true } = {}) {

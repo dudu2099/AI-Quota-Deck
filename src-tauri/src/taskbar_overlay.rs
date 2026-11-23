@@ -303,18 +303,18 @@ pub fn snap_with_preferences(
     }
     let window = app
         .get_webview_window(WINDOW_LABEL)
-        .ok_or_else(|| "widget window is unavailable".to_string())?;
+        .ok_or_else(|| "找不到小窗窗口".to_string())?;
     let hwnd = native_hwnd(&window)?;
-    let bounds = window_rect(hwnd).ok_or_else(|| "cannot read Strip position".to_string())?;
+    let bounds = window_rect(hwnd).ok_or_else(|| "读不到长条位置".to_string())?;
     let taskbars = taskbars();
     let taskbar = nearest_taskbar(&taskbars, bounds)
-        .ok_or_else(|| "Windows did not report an available taskbar".to_string())?;
+        .ok_or_else(|| "Windows 没有报告可用的任务栏".to_string())?;
     let position = snapped_position(bounds, taskbar.bounds);
     if (bounds.left, bounds.top) != (position.x, position.y) {
         widget::move_strip_for_taskbar(&window, state, position)?;
     }
     if !raise_without_activation(hwnd) {
-        return Err("Windows could not place the Strip above the taskbar".to_string());
+        return Err("Windows 无法把长条放到任务栏上方".to_string());
     }
     Ok(())
 }

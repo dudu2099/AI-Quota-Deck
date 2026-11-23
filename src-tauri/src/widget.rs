@@ -44,7 +44,7 @@ impl DisplayMode {
             "dashboard" => Ok(Self::Dashboard),
             "widget" => Ok(Self::Widget),
             "strip" => Ok(Self::Strip),
-            _ => Err(format!("unknown display mode: {mode}")),
+            _ => Err(format!("未知的显示模式：{mode}")),
         }
     }
 }
@@ -62,7 +62,7 @@ impl UsageDisplay {
         match mode {
             "used" => Ok(Self::Used),
             "remaining" => Ok(Self::Remaining),
-            _ => Err(format!("unknown usage display: {mode}")),
+            _ => Err(format!("未知的用量显示方式：{mode}")),
         }
     }
 }
@@ -137,7 +137,7 @@ impl WidgetState {
     fn lock(&self) -> Result<MutexGuard<'_, WidgetPreferences>, String> {
         self.preferences
             .lock()
-            .map_err(|_| "widget preferences are unavailable".to_string())
+            .map_err(|_| "读不到小窗设置".to_string())
     }
 
     fn replace(&self, preferences: WidgetPreferences) -> Result<WidgetPreferences, String> {
@@ -155,7 +155,7 @@ impl WidgetState {
         *self
             .user_drag_until
             .lock()
-            .map_err(|_| "widget drag state is unavailable".to_string())? =
+            .map_err(|_| "读不到小窗拖动状态".to_string())? =
             Some(Instant::now() + USER_DRAG_WINDOW);
         Ok(())
     }
@@ -258,27 +258,27 @@ fn preferences_path() -> Option<PathBuf> {
 
 fn persist(preferences: &WidgetPreferences) -> Result<(), String> {
     let path = preferences_path()
-        .ok_or_else(|| "could not locate the local application data directory".to_string())?;
+        .ok_or_else(|| "找不到本地应用数据目录".to_string())?;
     persist_to(&path, preferences)
 }
 
 fn persist_to(path: &Path, preferences: &WidgetPreferences) -> Result<(), String> {
     let parent = path
         .parent()
-        .ok_or_else(|| "widget preferences path has no parent directory".to_string())?;
+        .ok_or_else(|| "小窗设置路径没有上级目录".to_string())?;
     fs::create_dir_all(parent)
-        .map_err(|error| format!("cannot create widget preferences directory: {error}"))?;
+        .map_err(|error| format!("无法创建小窗设置目录：{error}"))?;
     let json = serde_json::to_string_pretty(preferences)
-        .map_err(|error| format!("cannot serialize widget preferences: {error}"))?;
+        .map_err(|error| format!("无法序列化小窗设置：{error}"))?;
     // A torn write makes load() fall back to defaults and lose the saved view,
     // positions, and hidden providers together. Write aside and rename so the
     // file always holds either the old preferences or the new ones.
     let staging = path.with_extension(format!("tmp-{}", std::process::id()));
     fs::write(&staging, json)
-        .map_err(|error| format!("cannot save widget preferences: {error}"))?;
+        .map_err(|error| format!("无法保存小窗设置：{error}"))?;
     fs::rename(&staging, path).map_err(|error| {
         let _ = fs::remove_file(&staging);
-        format!("cannot replace widget preferences: {error}")
+        format!("无法替换小窗设置文件：{error}")
     })
 }
 
@@ -386,7 +386,7 @@ fn place_on_screen(
     let window_size = window.outer_size().map_err(|error| error.to_string())?;
     let (screens, primary) = screens(window)?;
     clamped_position(saved_position(preferences), window_size, &screens, primary)
-        .ok_or_else(|| "Windows did not report an available monitor".to_string())
+        .ok_or_else(|| "Windows 没有报告可用的显示器".to_string())
 }
 
 fn emit_preferences(app: &AppHandle, preferences: &WidgetPreferences) {
@@ -416,7 +416,7 @@ fn initial_size(preferences: &WidgetPreferences) -> LogicalSize<f64> {
 pub fn apply(app: &AppHandle, state: &WidgetState) -> Result<WidgetPreferences, String> {
     let window = app
         .get_webview_window(WINDOW_LABEL)
-        .ok_or_else(|| "widget window is unavailable".to_string())?;
+        .ok_or_else(|| "找不到小窗窗口".to_string())?;
     let preferences = state.snapshot()?;
     if preferences.visible {
         prepare_document(&window, &preferences);
@@ -490,7 +490,7 @@ pub fn set_provider_hidden(
     hidden: bool,
 ) -> Result<WidgetPreferences, String> {
     if id.trim().is_empty() {
-        return Err("provider id is required".to_string());
+        return Err("缺少来源 ID".to_string());
     }
     let previous = state.snapshot()?;
     let mut next = previous.clone();
@@ -532,7 +532,7 @@ pub fn set_taskbar_overlay(
 
     #[cfg(not(target_os = "windows"))]
     if enabled {
-        return Err("taskbar overlay is available only on Windows".to_string());
+        return Err("任务栏置顶只在 Windows 上可用".to_string());
     }
 
     let mut next = previous.clone();
@@ -550,11 +550,11 @@ pub fn set_taskbar_overlay(
 
 pub fn start_dragging(window: &WebviewWindow, state: &WidgetState) -> Result<(), String> {
     if window.label() != WINDOW_LABEL {
-        return Err("only the companion window can use the drag command".to_string());
+        return Err("只有小窗窗口能使用拖动命令".to_string());
     }
     let preferences = state.snapshot()?;
     if !preferences.strip && preferences.locked {
-        return Err("unlock the widget before moving it".to_string());
+        return Err("先解锁小窗再移动".to_string());
     }
     state.begin_user_drag()?;
     if let Err(error) = window.start_dragging() {
@@ -571,7 +571,7 @@ pub fn resize(
     height: f64,
 ) -> Result<(), String> {
     if window.label() != WINDOW_LABEL {
-        return Err("only the companion window can resize itself".to_string());
+        return Err("只有小窗窗口能调整自身大小".to_string());
     }
     let preferences = state.snapshot()?;
     let size = if preferences.strip {
@@ -624,7 +624,7 @@ pub(crate) fn move_strip_for_taskbar(
     position: PhysicalPosition<i32>,
 ) -> Result<(), String> {
     if window.label() != WINDOW_LABEL {
-        return Err("only the companion window can use taskbar placement".to_string());
+        return Err("只有小窗窗口能使用任务栏定位".to_string());
     }
 
     // Overlay alignment is not a user drag. Move the window and do not persist
@@ -649,7 +649,7 @@ pub fn restore_after_resume(app: &AppHandle, state: &WidgetState) -> Result<bool
     }
     let window = app
         .get_webview_window(WINDOW_LABEL)
-        .ok_or_else(|| "widget window is unavailable".to_string())?;
+        .ok_or_else(|| "找不到小窗窗口".to_string())?;
 
     window
         .set_always_on_top(true)

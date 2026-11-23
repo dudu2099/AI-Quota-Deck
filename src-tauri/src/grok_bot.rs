@@ -96,8 +96,8 @@ fn snapshot_exists() -> bool {
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, subject: &str) -> Result<T, String> {
     let raw =
-        std::fs::read_to_string(path).map_err(|error| format!("cannot read {subject}: {error}"))?;
-    serde_json::from_str(&raw).map_err(|error| format!("cannot parse {subject}: {error}"))
+        std::fs::read_to_string(path).map_err(|error| format!("无法读取 {subject}：{error}"))?;
+    serde_json::from_str(&raw).map_err(|error| format!("无法解析 {subject}：{error}"))
 }
 
 #[cfg(target_os = "windows")]
@@ -111,7 +111,7 @@ fn dpapi_unprotect(bytes: &[u8]) -> Result<Vec<u8>, String> {
         cbData: bytes
             .len()
             .try_into()
-            .map_err(|_| "encrypted key is too large")?,
+            .map_err(|_| "加密密钥过大")?,
         pbData: bytes.as_ptr() as *mut u8,
     };
     let mut output = CRYPT_INTEGER_BLOB {
@@ -131,7 +131,7 @@ fn dpapi_unprotect(bytes: &[u8]) -> Result<Vec<u8>, String> {
     };
     if succeeded == 0 || output.pbData.is_null() {
         return Err(format!(
-            "Windows could not unlock the Grok Bot profile ({})",
+            "Windows 无法解锁 Grok Bot 配置文件（{}）",
             std::io::Error::last_os_error()
         ));
     }
@@ -145,19 +145,19 @@ fn dpapi_unprotect(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 #[cfg(not(target_os = "windows"))]
 fn dpapi_unprotect(_bytes: &[u8]) -> Result<Vec<u8>, String> {
-    Err("Grok Bot profile decryption is supported on Windows only".to_string())
+    Err("只有 Windows 支持解密 Grok Bot 配置文件".to_string())
 }
 
 fn master_key(state: &LocalState) -> Result<Vec<u8>, String> {
     let wrapped = general_purpose::STANDARD
         .decode(&state.os_crypt.encrypted_key)
-        .map_err(|error| format!("Grok Bot's encrypted key is not valid base64: {error}"))?;
+        .map_err(|error| format!("Grok Bot 的加密密钥不是有效的 base64：{error}"))?;
     let payload = wrapped
         .strip_prefix(b"DPAPI")
-        .ok_or("Grok Bot's encrypted key has an unknown format")?;
+        .ok_or("Grok Bot 的加密密钥格式未知")?;
     let key = dpapi_unprotect(payload)?;
     if key.len() != 32 {
-        return Err("Grok Bot's unlocked profile key has an unexpected length".to_string());
+        return Err("Grok Bot 解锁后的配置密钥长度不对".to_string());
     }
     Ok(key)
 }
@@ -165,20 +165,20 @@ fn master_key(state: &LocalState) -> Result<Vec<u8>, String> {
 fn decrypt_v10(encoded: &str, key: &[u8]) -> Result<Vec<u8>, String> {
     let blob = general_purpose::STANDARD
         .decode(encoded)
-        .map_err(|error| format!("encrypted Grok Bot value is not valid base64: {error}"))?;
+        .map_err(|error| format!("Grok Bot 的加密数据不是有效的 base64：{error}"))?;
     if !blob.starts_with(b"v10") || blob.len() < 3 + 12 + 16 {
-        return Err("encrypted Grok Bot value has an unknown format".to_string());
+        return Err("Grok Bot 的加密数据格式未知".to_string());
     }
     let cipher = Aes256Gcm::new_from_slice(key)
-        .map_err(|_| "Grok Bot's profile key has an unexpected length".to_string())?;
+        .map_err(|_| "Grok Bot 的配置密钥长度不对".to_string())?;
     cipher
         .decrypt(Nonce::from_slice(&blob[3..15]), &blob[15..])
-        .map_err(|_| "Grok Bot profile authentication failed".to_string())
+        .map_err(|_| "Grok Bot 配置文件校验失败".to_string())
 }
 
 fn decrypt_string(encoded: &str, key: &[u8], subject: &str) -> Result<String, String> {
     String::from_utf8(decrypt_v10(encoded, key)?)
-        .map_err(|_| format!("decrypted {subject} is not text"))
+        .map_err(|_| format!("解密后的 {subject}不是文本"))
 }
 
 fn jwt_exp(token: &str) -> Option<i64> {
@@ -188,22 +188,22 @@ fn jwt_exp(token: &str) -> Option<i64> {
 }
 
 fn load_credentials_from(profile: &Path) -> Result<Credentials, String> {
-    let state: LocalState = read_json(&profile.join("Local State"), "Grok Bot Local State")?;
+    let state: LocalState = read_json(&profile.join("Local State"), "Grok Bot 的 Local State 文件")?;
     let secrets: Secrets = read_json(
         &profile.join("sand-secrets.json"),
-        "Grok Bot's local sign-in record",
+        "Grok Bot 的本地登录记录",
     )?;
     let key = master_key(&state)?;
     let accounts: Accounts = serde_json::from_str(&secrets.accounts)
-        .map_err(|error| format!("cannot parse Grok Bot's account list: {error}"))?;
+        .map_err(|error| format!("无法解析 Grok Bot 的账号列表：{error}"))?;
     let active = accounts
         .accounts
         .get(&accounts.active)
-        .ok_or("Grok Bot's active account is missing")?;
-    let access_token = decrypt_string(&active.access_token, &key, "Grok Bot access token")?;
-    let machine_id = decrypt_string(&secrets.machine_id, &key, "Grok Bot machine id")?;
+        .ok_or("找不到 Grok Bot 当前登录的账号")?;
+    let access_token = decrypt_string(&active.access_token, &key, "Grok Bot 访问令牌")?;
+    let machine_id = decrypt_string(&secrets.machine_id, &key, "Grok Bot 机器 ID")?;
     if access_token.trim().is_empty() || machine_id.trim().is_empty() {
-        return Err("Grok Bot's local sign-in record is incomplete".to_string());
+        return Err("Grok Bot 的本地登录记录不完整".to_string());
     }
     Ok(Credentials {
         access_token,
@@ -237,24 +237,24 @@ fn checksum_at(machine_id: &str, epoch_millis: i64) -> String {
 fn read_varint(bytes: &[u8], cursor: &mut usize) -> Result<u64, String> {
     let mut value = 0_u64;
     for shift in (0..70).step_by(7) {
-        let byte = *bytes.get(*cursor).ok_or("truncated protobuf varint")?;
+        let byte = *bytes.get(*cursor).ok_or("protobuf varint 被截断")?;
         *cursor += 1;
         value |= u64::from(byte & 0x7f) << shift;
         if byte & 0x80 == 0 {
             return Ok(value);
         }
     }
-    Err("protobuf varint is too long".to_string())
+    Err("protobuf varint 过长".to_string())
 }
 
 fn length_delimited<'a>(bytes: &'a [u8], cursor: &mut usize) -> Result<&'a [u8], String> {
     let length: usize = read_varint(bytes, cursor)?
         .try_into()
-        .map_err(|_| "protobuf field is too large")?;
+        .map_err(|_| "protobuf 字段过大")?;
     let end = cursor
         .checked_add(length)
-        .ok_or("protobuf field length overflow")?;
-    let field = bytes.get(*cursor..end).ok_or("truncated protobuf field")?;
+        .ok_or("protobuf 字段长度溢出")?;
+    let field = bytes.get(*cursor..end).ok_or("protobuf 字段被截断")?;
     *cursor = end;
     Ok(field)
 }
@@ -264,15 +264,15 @@ fn skip_field(bytes: &[u8], cursor: &mut usize, wire: u64) -> Result<(), String>
         0 => {
             read_varint(bytes, cursor)?;
         }
-        1 => *cursor = cursor.checked_add(8).ok_or("protobuf field overflow")?,
+        1 => *cursor = cursor.checked_add(8).ok_or("protobuf 字段溢出")?,
         2 => {
             length_delimited(bytes, cursor)?;
         }
-        5 => *cursor = cursor.checked_add(4).ok_or("protobuf field overflow")?,
-        _ => return Err(format!("unsupported protobuf wire type {wire}")),
+        5 => *cursor = cursor.checked_add(4).ok_or("protobuf 字段溢出")?,
+        _ => return Err(format!("不支持的 protobuf 线路类型 {wire}")),
     }
     if *cursor > bytes.len() {
-        return Err("truncated protobuf field".to_string());
+        return Err("protobuf 字段被截断".to_string());
     }
     Ok(())
 }
@@ -289,7 +289,7 @@ fn timestamp_seconds(bytes: &[u8]) -> Result<i64, String> {
             skip_field(bytes, &mut cursor, wire)?;
         }
     }
-    seconds.ok_or("protobuf timestamp has no seconds".to_string())
+    seconds.ok_or("protobuf 时间戳缺少秒数".to_string())
 }
 
 fn optional_text(bytes: &[u8]) -> Option<String> {
@@ -315,9 +315,9 @@ fn parse_usage_status(bytes: &[u8]) -> Result<UsageStatus, String> {
             (3, 1) => {
                 let raw: [u8; 8] = bytes
                     .get(cursor..cursor + 8)
-                    .ok_or("truncated usage percentage")?
+                    .ok_or("用量百分比被截断")?
                     .try_into()
-                    .map_err(|_| "invalid usage percentage")?;
+                    .map_err(|_| "用量百分比无效")?;
                 result.usage_percent = Some(f64::from_le_bytes(raw));
                 cursor += 8;
             }
@@ -357,7 +357,7 @@ fn quota_from(status: UsageStatus) -> ProviderQuota {
     if status.uses_pooled_enterprise_allowance == Some(true) {
         return ProviderQuota::unavailable(
             PROVIDER,
-            "Grok Bot uses a pooled enterprise allowance that does not report an individual percentage.",
+            "Grok Bot 用的是企业共享额度，不提供个人用量百分比。",
         );
     }
     if status.included_limit_zero == Some(true)
@@ -365,7 +365,7 @@ fn quota_from(status: UsageStatus) -> ProviderQuota {
     {
         return ProviderQuota::unavailable(
             PROVIDER,
-            "Signed in to Grok Bot, but this account reports no included usage limit.",
+            "已登录 Grok Bot，但这个账号没有包含的用量限额。",
         );
     }
     let Some(percent) = status
@@ -374,7 +374,7 @@ fn quota_from(status: UsageStatus) -> ProviderQuota {
     else {
         return ProviderQuota::unavailable(
             PROVIDER,
-            "Grok Bot did not report an individual weekly usage percentage.",
+            "Grok Bot 没有提供个人的每周用量百分比。",
         );
     };
     let window_seconds = status
@@ -436,7 +436,7 @@ fn cached_quota_from_raw(raw: &str, current_time: i64, reason: &str) -> Option<P
         snapshot.plan,
         snapshot.windows,
         Stale {
-            source: "last Grok Bot check".to_string(),
+            source: "上次的 Grok Bot 查询".to_string(),
             observed_at: Some(snapshot.observed_at),
             reason: reason.to_string(),
         },
@@ -456,7 +456,7 @@ fn action_required(reason: &str) -> ProviderQuota {
     cached_quota(reason).unwrap_or_else(|| {
         ProviderQuota::action_required(
             PROVIDER,
-            "Open Grok Bot and sign in again so it can renew its access token.",
+            "打开 Grok Bot 并重新登录，让它更新访问令牌。",
         )
     })
 }
@@ -464,13 +464,13 @@ fn action_required(reason: &str) -> ProviderQuota {
 pub async fn fetch() -> ProviderQuota {
     let _guard = FETCH_LOCK.lock().await;
     let Some(profile) = profile_dir() else {
-        return ProviderQuota::not_configured(PROVIDER, "Install Grok Bot and sign in once.");
+        return ProviderQuota::not_configured(PROVIDER, "安装 Grok Bot 并登录一次。");
     };
     if !profile.join("sand-secrets.json").is_file() || !profile.join("Local State").is_file() {
         return if snapshot_exists() {
-            action_required("Grok Bot's local sign-in record is missing.")
+            action_required("Grok Bot 的本地登录记录不见了。")
         } else {
-            ProviderQuota::not_configured(PROVIDER, "Install Grok Bot and sign in once.")
+            ProviderQuota::not_configured(PROVIDER, "安装 Grok Bot 并登录一次。")
         };
     }
 
@@ -480,12 +480,12 @@ pub async fn fetch() -> ProviderQuota {
             Ok(Err(error)) => return action_required(&error),
             Err(error) => {
                 return fallback(&format!(
-                    "could not read Grok Bot's sign-in record: {error}"
+                    "无法读取 Grok Bot 的登录记录：{error}"
                 ))
             }
         };
     if jwt_exp(&credentials.access_token).is_some_and(|expiry| expiry <= now()) {
-        return action_required("Grok Bot's access token has expired.");
+        return action_required("Grok Bot 的访问令牌已过期。");
     }
 
     let client = match reqwest::Client::builder()
@@ -493,7 +493,7 @@ pub async fn fetch() -> ProviderQuota {
         .build()
     {
         Ok(client) => client,
-        Err(error) => return fallback(&format!("could not create the Grok Bot client: {error}")),
+        Err(error) => return fallback(&format!("无法创建 Grok Bot 客户端：{error}")),
     };
     let checksum = checksum_at(
         &credentials.machine_id,
@@ -518,21 +518,21 @@ pub async fn fetch() -> ProviderQuota {
         .await
     {
         Ok(response) => response,
-        Err(error) => return fallback(&format!("Grok Bot usage request failed: {error}")),
+        Err(error) => return fallback(&format!("Grok Bot 用量请求失败：{error}")),
     };
     if response.status() == reqwest::StatusCode::UNAUTHORIZED
         || response.status() == reqwest::StatusCode::FORBIDDEN
     {
-        return action_required("Grok Bot rejected its saved access token.");
+        return action_required("Grok Bot 拒绝了保存的访问令牌。");
     }
     if !response.status().is_success() {
-        return fallback(&http_failure(response.status(), "Grok Bot's usage service"));
+        return fallback(&http_failure(response.status(), "Grok Bot 用量服务"));
     }
     let bytes = match response.bytes().await {
         Ok(bytes) => bytes,
         Err(error) => {
             return fallback(&format!(
-                "could not read Grok Bot's usage response: {error}"
+                "无法读取 Grok Bot 用量服务的返回：{error}"
             ))
         }
     };
@@ -540,7 +540,7 @@ pub async fn fetch() -> ProviderQuota {
         Ok(status) => status,
         Err(error) => {
             return fallback(&format!(
-                "could not parse Grok Bot's usage response: {error}"
+                "无法解析 Grok Bot 用量服务的返回：{error}"
             ))
         }
     };

@@ -67,5 +67,5 @@ export function displayedPercent(usedPercent, mode = "used") {
 }
 
 export function usageDisplayLabel(mode = "used") {
-  return mode === "remaining" ? "left" : "used";
+  return mode === "remaining" ? "剩余" : "已用";
 }

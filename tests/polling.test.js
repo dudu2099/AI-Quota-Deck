@@ -152,8 +152,8 @@ test("usage display can show consumed or remaining allowance", () => {
   assert.equal(displayedPercent(40, "remaining"), 60);
   assert.equal(displayedPercent(-5, "remaining"), 100);
   assert.equal(displayedPercent(105, "remaining"), 0);
-  assert.equal(usageDisplayLabel("used"), "used");
-  assert.equal(usageDisplayLabel("remaining"), "left");
+  assert.equal(usageDisplayLabel("used"), "已用");
+  assert.equal(usageDisplayLabel("remaining"), "剩余");
 });
 
 test("last-updated uses observations, never failed attempt time", () => {
