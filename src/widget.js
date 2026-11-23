@@ -77,8 +77,9 @@ function resetText(window_) {
   return left > 0 ? `${duration(left)}后重置` : "正在重置";
 }
 
-/** The strip spells each figure out ("剩 56% 1天21小时后重置") and names the
- *  window only when one provider shows several, since a lone one is weekly. */
+/** The strip prefixes each figure with 剩/已用 and names the window only when
+ *  one provider shows several, since a lone one is weekly. The reset time
+ *  stays in the hover title: in line it made the strip too long. */
 function renderMetric(window_, sharesRow) {
   const metric = el("span", `widget-metric ${quotaTone(window_.percent, window_.severity)}`);
   const percent = displayedPercent(window_.percent, preferences.usage_display);
@@ -92,7 +93,6 @@ function renderMetric(window_, sharesRow) {
     metric.append(el("span", "metric-usage", stripUsageLabel(preferences.usage_display)));
   }
   metric.append(el("span", "metric-value", `${Math.round(percent)}%`));
-  if (preferences.strip && reset) metric.append(el("span", "metric-reset", reset));
   return metric;
 }
 
