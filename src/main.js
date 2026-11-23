@@ -226,6 +226,17 @@ function el(tag, className, text) {
   return node;
 }
 
+const TRACK_TICKS = 40;
+
+/** Follows the rounded figure printed beside the meter, so "100%" is a full
+ *  meter and "99%" is not; any non-zero figure lights at least one tick. */
+function litTicks(percent) {
+  const shown = Math.round(percent);
+  if (shown <= 0) return 0;
+  if (shown >= 100) return TRACK_TICKS;
+  return Math.max(1, Math.floor((shown / 100) * TRACK_TICKS));
+}
+
 function renderWindow(window_) {
   const percent = displayedPercent(window_.percent, widgetPreferences.usage_display);
   const pace = pacePercent(window_);
@@ -234,7 +245,6 @@ function renderWindow(window_) {
 
   const row = el("div", "row");
   row.style.setProperty("--meter", meterVar(window_.percent, window_.severity));
-  row.style.setProperty("--fill", `${percent}%`);
 
   const head = el("div", "row-head");
   head.append(el("span", "row-label", window_.label));
@@ -245,7 +255,10 @@ function renderWindow(window_) {
   row.append(head);
 
   const track = el("div", "track");
-  track.append(el("div", "track-fill"));
+  const lit = litTicks(percent);
+  for (let tick = 0; tick < TRACK_TICKS; tick += 1) {
+    track.append(el("i", tick < lit ? "tick on" : "tick"));
+  }
   if (displayedPace !== null) {
     const mark = el("div", "track-pace");
     mark.style.setProperty("--pace-at", `${displayedPace}%`);

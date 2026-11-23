@@ -1,8 +1,8 @@
 /* AI Quota Deck — a tray panel, read in a glance and dismissed.
 
-   The palette, the 6px bar and the 70/90 thresholds are carried over from the
-   sibling Gemini and Grok extensions so the three read as one family. Only the
-   pace mark is new, and it borrows the accent already in that vocabulary.
+   The palette and the 70/90 thresholds are carried over from the sibling
+   Gemini and Grok extensions so the three read as one family. The meter is a
+   row of 40 ticks with a small pace triangle above it, in the accent colour.
 
    `data-theme` is always set explicitly by main.js (resolved from the stored
    choice, or the OS when there is none), so the dark palette is written once. */
@@ -241,19 +241,21 @@ body {
 
 .track {
   position: relative;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--track);
-  margin-top: 4px;
+  display: grid;
+  grid-template-columns: repeat(40, 1fr);
+  gap: 2px;
+  height: 12px;
+  margin-top: 8px;
 }
 
-.track-fill {
-  height: 100%;
-  width: var(--fill);
-  min-width: 2px;
-  border-radius: 3px;
+.tick {
+  border-radius: 1px;
+  background: var(--track);
+}
+
+.tick.on {
   background: var(--meter);
-  transition: width 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
 /* The one addition to the family's vocabulary: where even consumption would
@@ -261,12 +263,14 @@ body {
    mode mirrors both values, so it is ahead when fill falls short. */
 .track-pace {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
+  top: -7px;
   left: var(--pace-at);
-  width: 1px;
-  background: var(--accent);
-  opacity: 0.8;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--accent);
+  transform: translateX(-4px);
 }
 
 .row-note {
@@ -758,7 +762,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .track-fill,
+  .tick.on,
   .sources-trigger,
   .source-dot,
   .source-mark,
