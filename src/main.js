@@ -12,6 +12,14 @@ import {
 import { displayedPercent, usageDisplayLabel } from "./widget-model.js";
 import { PALETTE_KEY, PALETTES } from "./palettes.js";
 import { mountStageArt } from "./stage-art.js";
+import {
+  clockAt,
+  dayZoneLabel,
+  formatPoints,
+  formatTokens,
+  tokenParts,
+  tokenTotals,
+} from "./token-format.js";
 
 mountStageArt();
 const { invoke } = window.__TAURI__.core;
@@ -97,6 +105,7 @@ const THEME_KEY = "quota-deck-theme";
 
 const providersEl = document.getElementById("providers");
 const providerControlsEl = document.getElementById("provider-controls");
+const tokensEl = document.getElementById("tokens");
 const updatedEl = document.getElementById("updated");
 const countdownEl = document.getElementById("countdown");
 const widgetModeEl = document.getElementById("widget-mode");
@@ -718,6 +727,14 @@ function publishWidgetSnapshot() {
     results,
     backoffUntil,
     updatedAt: lastUpdatedAt?.getTime() ?? null,
+    tokens: tokenDay
+      ? {
+          ...tokenTotals(tokenDay.rows),
+          rows: tokenDay.rows.map(({ label, status, total }) => ({ label, status, total })),
+          utc_offset_minutes: tokenDay.utc_offset_minutes,
+          observed_at: tokenDay.observed_at,
+        }
+      : null,
     theme: document.documentElement.dataset.theme,
     palette: document.documentElement.dataset.palette ?? null,
   }).catch(() => {});
@@ -733,6 +750,13 @@ let nextRefreshAt = null;
 let refreshTimer = null;
 let sourcesExpanded = false;
 let bridgePath = null;
+
+// Today's tokens. Declared up here because the first render() publishes the
+// companion snapshot, which carries them, before the token section is set up.
+const TOKEN_POLL_MS = 60_000;
+let tokenDay = null;
+let tokenError = null;
+let tokenFetching = false;
 
 document.addEventListener("pointerdown", (event) => {
   if (!sourcesExpanded || providerControlsEl.contains(event.target)) return;
@@ -933,6 +957,116 @@ function deferClaudeAfterResume() {
     CLAUDE_RESUME_GRACE_MS,
   );
 }
+
+// ── Today's tokens ─────────────────────────────────────────────────────────
+// Counted on this machine from each tool's own logs; nothing is sent anywhere.
+// Rust reads only what was appended since the last call, so a minute's cadence
+// is cheap — but there is no point reading logs for a panel nobody can see.
+
+function tokenNote(row) {
+  if (row.total === 0 && !row.weekly_points) return "今天还没用";
+  const parts = [];
+  if (row.id === "grok") {
+    if (row.total > 0) parts.push(`命令行 ${formatTokens(row.total)}`);
+  } else if (row.total > 0) {
+    parts.push(`新算 ${formatTokens(row.fresh)}`, `读缓存 ${formatTokens(row.cache_read)}`);
+  }
+  if (row.requests > 0) parts.push(`${row.requests} 次`);
+  let note = parts.join(" · ");
+
+  // Grok Bot keeps no token counts anywhere this machine can read; the honest
+  // daily figure is how far its weekly allowance moved today.
+  const weekly = row.weekly_points;
+  if (weekly) {
+    const since = weekly.from_day_start
+      ? ""
+      : `（从 ${clockAt(weekly.since, tokenDay.utc_offset_minutes)} 起）`;
+    const bot = `${weekly.product} 不记 token，今天用掉周额度 ${formatPoints(weekly.points)} 个点${since}`;
+    note = note ? `${note}；${bot}` : bot;
+  }
+  return note;
+}
+
+function renderTokenRow(row) {
+  const item = el("div", "token-row");
+  const head = el("div", "row-head");
+  head.append(el("span", "row-label", row.label));
+
+  if (row.status !== "ok") {
+    head.append(el("span", "token-figure muted", "—"));
+    item.append(head, el("p", "row-note", row.reason || "读不到"));
+    return item;
+  }
+
+  const { value, unit } = tokenParts(row.total);
+  const figure = el("span", "token-figure", value);
+  if (unit) figure.append(el("span", "unit", unit));
+  head.append(figure);
+  item.append(head, el("p", "row-note", tokenNote(row)));
+
+  // Gemini pools the IDE, the agy CLI and T3 on one allowance; which of them
+  // spent it is a hover away rather than another line on every glance.
+  if (row.sources?.length > 1) {
+    item.title = row.sources
+      .map((source) => `${source.label} ${formatTokens(source.total)}`)
+      .join(" · ");
+  }
+  return item;
+}
+
+function renderTokenSum(rows) {
+  const totals = tokenTotals(rows);
+  const item = el("div", "token-row token-sum");
+  const head = el("div", "row-head");
+  head.append(el("span", "row-label", "合计"));
+  const { value, unit } = tokenParts(totals.total);
+  const figure = el("span", "token-figure", value);
+  if (unit) figure.append(el("span", "unit", unit));
+  head.append(figure);
+
+  let note = `新算 ${formatTokens(totals.fresh)} · 读缓存 ${formatTokens(totals.cache_read)} · ${totals.requests} 次`;
+  if (totals.missing.length) note += `（${totals.missing.join("、")} 读不到，没算进去）`;
+  item.append(head, el("p", "row-note", note));
+  return item;
+}
+
+function renderTokens() {
+  const head = el("div", "provider-head");
+  head.append(el("h2", "provider-name", "今日 Token"));
+  if (tokenDay) {
+    const offset = tokenDay.utc_offset_minutes;
+    head.append(
+      el("span", "badge", `${dayZoneLabel(offset)}零点起 · ${clockAt(tokenDay.observed_at, offset)}`),
+    );
+  }
+
+  const body = tokenDay
+    ? [renderTokenSum(tokenDay.rows), ...tokenDay.rows.map(renderTokenRow)]
+    : [el("p", "note", tokenError ? `读不到：${tokenError}` : "读取中…")];
+  tokensEl.replaceChildren(head, ...body);
+}
+
+// The strip shows today's total too, and while it is up this window is hidden,
+// so "nobody can see it" means neither the panel nor the companion is showing.
+async function refreshTokens() {
+  if (tokenFetching || (document.hidden && !widgetPreferences.visible)) return;
+  tokenFetching = true;
+  try {
+    tokenDay = await invoke("token_usage_today");
+    tokenError = null;
+  } catch (error) {
+    tokenError = String(error);
+  } finally {
+    tokenFetching = false;
+  }
+  renderTokens();
+  publishWidgetSnapshot();
+}
+
+renderTokens();
+void refreshTokens();
+setInterval(() => void refreshTokens(), TOKEN_POLL_MS);
+document.addEventListener("visibilitychange", () => void refreshTokens());
 
 await listen("system-activity-resumed", deferClaudeAfterResume);
 await listen("active-refresh-tick", refreshFromNativeTick);

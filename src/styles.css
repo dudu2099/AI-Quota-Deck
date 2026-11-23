@@ -386,6 +386,56 @@ body {
   margin-top: 10px;
 }
 
+/* ── Today's tokens ───────────────────────────────────────────────────── */
+
+/* A count, not an allowance: no meter, so the figure sits in the title colour
+   rather than the meter's, which would suggest a limit being approached. */
+.tokens {
+  flex: none;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.token-row + .token-row {
+  margin-top: 9px;
+}
+
+.token-figure {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--title);
+}
+
+.token-figure .unit {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--label);
+  margin-left: 2px;
+}
+
+.token-figure.muted {
+  color: var(--loading);
+}
+
+/* The sum leads the section and is set apart from the four rows it adds up. */
+.token-sum {
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.token-sum .token-figure {
+  font-size: 20px;
+}
+
+.token-sum .token-figure .unit {
+  font-size: 11px;
+}
+
+.token-row .row-note {
+  margin-top: 2px;
+}
+
 /* ── Source picker and empty state ───────────────────────────────────── */
 
 .provider-empty {

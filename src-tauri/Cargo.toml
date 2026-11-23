@@ -32,6 +32,7 @@ dirs = "6"
 tokio = { version = "1", features = ["sync", "time"] }
 base64 = "0.22"
 aes-gcm = "0.10"
+rusqlite = { version = "0.43", features = ["bundled"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

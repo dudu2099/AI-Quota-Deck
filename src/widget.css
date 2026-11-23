@@ -323,6 +323,17 @@ body {
   font-size: 8.5px;
 }
 
+/* Today's tokens are a count, not an allowance: no health colour. */
+.widget-metric.token .metric-value {
+  color: var(--title);
+}
+
+.metric-unit {
+  margin-left: 1px;
+  font-size: 8.5px;
+  font-weight: 500;
+}
+
 :root[data-mode="strip"] .widget-empty {
   align-self: center;
   padding: 0 14px;
@@ -401,7 +412,8 @@ body {
   color: color-mix(in oklch, var(--stage-night-line) 70%, transparent);
 }
 
-:root[data-palette][data-mode="strip"] .widget-metric.ok .metric-value {
+:root[data-palette][data-mode="strip"] .widget-metric.ok .metric-value,
+:root[data-palette][data-mode="strip"] .widget-metric.token .metric-value {
   color: var(--stage-night-highlight);
 }
 

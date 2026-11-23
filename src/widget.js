@@ -10,6 +10,7 @@ import {
   widgetWindows,
 } from "./widget-model.js";
 import { mountStageArt } from "./stage-art.js";
+import { clockAt, dayZoneLabel, formatTokens, tokenParts } from "./token-format.js";
 
 mountStageArt();
 
@@ -138,6 +139,38 @@ function renderProvider(provider, quota) {
   return row;
 }
 
+/** The strip's last segment: today's tokens across every source, in the same
+ *  name-then-figure shape as a provider so the strip reads as one line. The
+ *  per-source split and the day boundary wait in the hover title. */
+function renderTokenSegment(tokens) {
+  const row = el("section", "widget-provider token-total");
+  const identity = el("div", "provider-identity");
+  identity.append(el("span", "provider-name", "Token"));
+  row.append(identity);
+
+  const metric = el("span", "widget-metric token");
+  metric.append(el("span", "metric-usage", "今日"));
+  const { value, unit } = tokenParts(tokens.total);
+  const figure = el("span", "metric-value", value);
+  if (unit) figure.append(el("span", "metric-unit", unit));
+  metric.append(figure);
+
+  const zone = dayZoneLabel(tokens.utc_offset_minutes);
+  const lines = [
+    `今日 token（${zone}零点起，${clockAt(tokens.observed_at, tokens.utc_offset_minutes)} 更新）`,
+    `合计 ${formatTokens(tokens.total)} · 新算 ${formatTokens(tokens.fresh)}`,
+    tokens.rows
+      .map((source) => `${source.label} ${source.status === "ok" ? formatTokens(source.total) : "读不到"}`)
+      .join(" · "),
+  ];
+  row.title = lines.join("\n");
+
+  const metrics = el("div", "widget-metrics");
+  metrics.append(metric);
+  row.append(metrics);
+  return row;
+}
+
 function scheduleResize() {
   if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
   resizeFrame = requestAnimationFrame(() => {
@@ -246,6 +279,9 @@ function render() {
       ? configured.map((provider) => renderProvider(provider, snapshot.results[provider.id]))
       : [el("p", "widget-empty", allHidden ? "已隐藏全部来源" : "没有检测到任何来源")]),
   );
+  if (preferences.strip && snapshot.tokens) {
+    providersEl.append(renderTokenSegment(snapshot.tokens));
+  }
   statusEl.textContent = age(snapshot.updatedAt);
   scheduleResize();
 }

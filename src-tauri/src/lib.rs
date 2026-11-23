@@ -13,6 +13,7 @@ mod quota;
 mod startup;
 #[cfg(target_os = "windows")]
 mod taskbar_overlay;
+mod tokens;
 mod widget;
 
 use quota::ProviderQuota;
@@ -483,6 +484,7 @@ pub fn run() {
             grok_quota,
             grok_bot_quota,
             antigravity_quota,
+            tokens::token_usage_today,
             system_activity,
             bridge_dir,
             reveal_bridge_dir,
