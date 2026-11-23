@@ -4,7 +4,7 @@ Codex、Antigravity、Claude Code、Gemini、Grok、Grok Bot の利用枠があ�
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | **日本語**
 
-> このリポジトリは [JoshuaWang2211/ai-quota-deck](https://github.com/JoshuaWang2211/ai-quota-deck) のフォークです。各サービスの利用枠の取得、トレイアプリ、ブラウザブリッジは Joshua Wang 氏の成果で、このフォークでは画面まわりを作り直しています。
+> このプロジェクトは Joshua Wang 氏の [AI Quota Deck](https://github.com/JoshuaWang2211/ai-quota-deck) をベースにしています。各サービスの利用枠の取得、トレイアプリ、ブラウザブリッジは同氏の技術です。このフォークでは、作り直した画面、7 種類のパレット、見やすくなったストリップ、新しい Antigravity への対応など、多くの改良を加えています。
 >
 > **画面の表示は簡体字中国語です。** 英語の画面を使いたい場合は、[オリジナル版のリリース](https://github.com/JoshuaWang2211/ai-quota-deck/releases/latest)をご利用ください。
 

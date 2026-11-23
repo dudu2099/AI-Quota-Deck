@@ -4,7 +4,7 @@ Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemin
 
 [English](./README.md) | **简体中文** | [日本語](./README.ja.md)
 
-> 本项目分叉自 [JoshuaWang2211/ai-quota-deck](https://github.com/JoshuaWang2211/ai-quota-deck)。各家额度的读取、托盘程序和浏览器桥都是 Joshua Wang 的作品，这个分叉改的是界面。
+> 本项目基于 Joshua Wang 的 [AI Quota Deck](https://github.com/JoshuaWang2211/ai-quota-deck)：读取各家额度、托盘程序和浏览器桥是他的技术。这个分叉在此基础上做了大量改进：重做的界面、七套配色、更清楚的长条，以及对新版 Antigravity 的支持。
 >
 > **界面是简体中文。** 想用原版英文界面，请下载[原项目的安装包](https://github.com/JoshuaWang2211/ai-quota-deck/releases/latest)。
 

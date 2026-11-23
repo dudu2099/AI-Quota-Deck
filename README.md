@@ -4,7 +4,7 @@ A Windows tray dashboard that shows how much of each AI allowance is left and wh
 
 **English** | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
 
-> This is a fork of [JoshuaWang2211/ai-quota-deck](https://github.com/JoshuaWang2211/ai-quota-deck). The provider integrations, the tray app, and the browser bridge are Joshua Wang's work; this fork reworks the interface.
+> Built on [AI Quota Deck](https://github.com/JoshuaWang2211/ai-quota-deck) by Joshua Wang, whose work reads each provider's quota and runs the tray app and the browser bridge. This fork improves on it in many ways: a reworked interface, seven palettes, a clearer strip, and support for newer Antigravity versions.
 >
 > **The interface is in Simplified Chinese.** For the original English interface, use the [upstream release](https://github.com/JoshuaWang2211/ai-quota-deck/releases/latest).
 
