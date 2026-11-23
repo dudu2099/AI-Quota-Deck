@@ -695,6 +695,16 @@ Two traps:
 - The line also carries `--extension_server_csrf_token`. Only the literal
   `--csrf_token` flag (space or `=` form) is the right token.
 
+Antigravity 2.34.0 (verified 2026-11-22) runs a hub build instead,
+`language_server.exe --subclient_type hub --app_data_dir antigravity`, whose
+command line has no `--csrf_token`. It writes
+`%USERPROFILE%\.gemini\<app_data_dir>\daemon\hub_<httpPort>.json` with `pid`,
+`httpsPort`, `httpPort` and `csrfToken`, and never deletes it, so leftovers from
+earlier launches pile up there. The deck only reads these files, keeps one only
+when its pid is a running language server (the newest file wins if a pid was
+reused, and a token on the process's own command line beats any file), and
+tries its `httpsPort` before the listening-port scan.
+
 One IDE runs more than one language server: a global one owned by the main IDE
 process, and one per workspace window carrying `--enable_lsp`, `--workspace_id`
 and `--parent_pipe_path`. Both answer the same quota for the same account, so

@@ -1,11 +1,13 @@
 //! Antigravity quota, read from the IDE's local language server over loopback.
-//! The credential is a per-launch CSRF token on that server's command line, so
-//! it is rediscovered on every poll and never written anywhere. See
-//! ARCHITECTURE.md §7.
+//! The credential is a per-launch CSRF token, found on that server's command
+//! line or, for the hub build, in the `hub_<port>.json` file it writes under
+//! `~/.gemini`. It is rediscovered on every poll and the deck never writes it
+//! anywhere. See ARCHITECTURE.md §7.
 
-use std::path::PathBuf;
+use std::cmp::Reverse;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{collections::hash_map::DefaultHasher, hash::Hash, hash::Hasher};
 
 use serde::{Deserialize, Serialize};
@@ -15,10 +17,12 @@ use crate::quota::{http_failure, now, rfc3339_to_unix, ProviderQuota, QuotaWindo
 
 const PROVIDER: &str = "antigravity";
 const SERVICE_PATH: &str = "exa.language_server_pb.LanguageServerService";
-/// The x64 and ARM builds of the language server differ only in name.
-const LANGUAGE_SERVER_EXES: [&str; 2] = [
+/// The x64 and ARM builds of the language server differ only in name; the hub
+/// build that Antigravity 2.34 ships is plain `language_server.exe`.
+const LANGUAGE_SERVER_EXES: [&str; 3] = [
     "language_server_windows_x64.exe",
     "language_server_windows_arm.exe",
+    "language_server.exe",
 ];
 /// Each server opens a TLS listener, a plaintext twin and sometimes an LSP
 /// socket. The wrong ones fail within milliseconds; anything past this count
@@ -60,6 +64,20 @@ struct Candidate {
 struct ParsedCommandLine {
     csrf: String,
     enable_lsp: bool,
+}
+
+/// `hub_<httpPort>.json`, written by the hub build of the language server,
+/// which keeps its token off the command line. The server never removes the
+/// file, so most of them on disk name a process that has exited. Only the TLS
+/// port is read: the client below speaks HTTPS only, and the plaintext twin
+/// turns up in the listening scan anyway.
+#[derive(Deserialize)]
+struct HubFile {
+    pid: u32,
+    #[serde(rename = "csrfToken")]
+    csrf: String,
+    #[serde(rename = "httpsPort", default)]
+    https_port: Option<u16>,
 }
 
 enum Failure {
@@ -187,19 +205,27 @@ fn flag_value<'a>(tokens: &[&'a str], flag: &str) -> Option<&'a str> {
 }
 
 /// Only an Antigravity language server counts — the same binary also ships
-/// with other Codeium-based products, which carry a different `--app_data_dir`.
+/// with other Codeium-based products, which carry a different app data
+/// directory. The name is both the `--app_data_dir` value and the folder under
+/// `~/.gemini` that holds the hub files.
+fn is_antigravity_data_dir(name: &str) -> bool {
+    name == "antigravity" || name.starts_with("antigravity-")
+}
+
+fn is_csrf_token(token: &str) -> bool {
+    token.len() == 36
+        && token
+            .chars()
+            .all(|char| char.is_ascii_hexdigit() || char == '-')
+}
+
 fn parse_cmdline(command_line: &str) -> Option<ParsedCommandLine> {
     let tokens: Vec<&str> = command_line.split_whitespace().collect();
-    let app_data_dir = flag_value(&tokens, "--app_data_dir")?;
-    if app_data_dir != "antigravity" && !app_data_dir.starts_with("antigravity-") {
+    if !is_antigravity_data_dir(flag_value(&tokens, "--app_data_dir")?) {
         return None;
     }
     let csrf = flag_value(&tokens, "--csrf_token")?;
-    if csrf.len() != 36
-        || !csrf
-            .chars()
-            .all(|char| char.is_ascii_hexdigit() || char == '-')
-    {
+    if !is_csrf_token(csrf) {
         return None;
     }
     Some(ParsedCommandLine {
@@ -208,6 +234,86 @@ fn parse_cmdline(command_line: &str) -> Option<ParsedCommandLine> {
             .iter()
             .any(|token| *token == "--enable_lsp" || token.starts_with("--enable_lsp=")),
     })
+}
+
+/// Errors are dropped rather than formatted: a serde message can quote the
+/// value it choked on, and that value may be the token.
+fn parse_hub_file(raw: &str) -> Option<HubFile> {
+    let mut hub: HubFile = serde_json::from_str(raw).ok()?;
+    if !is_csrf_token(&hub.csrf) {
+        return None;
+    }
+    hub.https_port = hub.https_port.filter(|&port| port != 0);
+    Some(hub)
+}
+
+/// Every hub file under `<gemini_dir>/antigravity*/daemon/`, newest first, so
+/// that when Windows has reused a pid the live server's file comes before the
+/// leftover naming the same number. Read-only: the files belong to the IDE.
+fn read_hub_files(gemini_dir: &Path) -> Vec<HubFile> {
+    let Ok(app_dirs) = std::fs::read_dir(gemini_dir) else {
+        return Vec::new();
+    };
+    let mut hubs: Vec<(SystemTime, HubFile)> = app_dirs
+        .flatten()
+        .filter(|dir| {
+            dir.file_name()
+                .to_str()
+                .is_some_and(is_antigravity_data_dir)
+        })
+        .filter_map(|dir| std::fs::read_dir(dir.path().join("daemon")).ok())
+        .flatten()
+        .flatten()
+        .filter(|file| {
+            file.file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with("hub_") && name.ends_with(".json"))
+        })
+        .filter_map(|file| {
+            let written = file.metadata().ok()?.modified().ok()?;
+            let hub = parse_hub_file(&std::fs::read_to_string(file.path()).ok()?)?;
+            Some((written, hub))
+        })
+        .collect();
+    hubs.sort_by_key(|(written, _)| Reverse(*written));
+    hubs.into_iter().map(|(_, hub)| hub).collect()
+}
+
+/// The announced TLS port first, then the scan, each port once. Being first,
+/// the announced port is always inside the `MAX_PORTS_PER_PROCESS` that
+/// `try_fetch` tries.
+fn hub_ports(announced: Option<u16>, listening: Vec<u16>) -> Vec<u16> {
+    let mut ports = Vec::new();
+    for port in announced.into_iter().chain(listening) {
+        if !ports.contains(&port) {
+            ports.push(port);
+        }
+    }
+    ports
+}
+
+/// A process's own command line outranks a file on disk, so a pid that
+/// already has a command-line candidate keeps it. Otherwise the first hub file
+/// naming a running server wins, and only those pids are scanned for ports.
+/// The hub build is the IDE-global server and carries no `--enable_lsp`.
+fn merge_candidates(
+    mut candidates: Vec<Candidate>,
+    hubs: Vec<HubFile>,
+    running: &[u32],
+    listening_ports: impl Fn(u32) -> Vec<u16>,
+) -> Vec<Candidate> {
+    for hub in hubs {
+        if !running.contains(&hub.pid) || candidates.iter().any(|known| known.pid == hub.pid) {
+            continue;
+        }
+        candidates.push(Candidate {
+            pid: hub.pid,
+            ports: hub_ports(hub.https_port, listening_ports(hub.pid)),
+            csrf: hub.csrf,
+            enable_lsp: false,
+        });
+    }
+    candidates
 }
 
 /// The IDE-global server (no `--enable_lsp`) outlives workspace windows, so it
@@ -236,7 +342,10 @@ mod discovery {
         RTL_USER_PROCESS_PARAMETERS,
     };
 
-    use super::{is_language_server, parse_cmdline, Candidate, MAX_COMMAND_LINE_CHARS};
+    use super::{
+        is_language_server, merge_candidates, parse_cmdline, read_hub_files, Candidate,
+        MAX_COMMAND_LINE_CHARS,
+    };
 
     /// `GetExtendedTcpTable` takes the address family as a bare integer; this
     /// is AF_INET, the only family the language server listens on.
@@ -244,12 +353,14 @@ mod discovery {
 
     /// The flag reports a language server whose command line could not be
     /// read at all, which is a different thing from no server being there:
-    /// an elevated IDE refuses a reader that is not itself elevated.
+    /// an elevated IDE refuses a reader that is not itself elevated. A
+    /// readable line without a token is the hub build, not an unreadable one.
     pub(super) fn discover() -> (Vec<Candidate>, bool) {
+        let running = language_server_pids();
         let mut unreadable = false;
-        let candidates = language_server_pids()
-            .into_iter()
-            .filter_map(|pid| {
+        let from_command_lines = running
+            .iter()
+            .filter_map(|&pid| {
                 let Some(command_line) = command_line(pid) else {
                     unreadable = true;
                     return None;
@@ -263,6 +374,10 @@ mod discovery {
                 })
             })
             .collect();
+        let hubs = dirs::home_dir()
+            .map(|home| read_hub_files(&home.join(".gemini")))
+            .unwrap_or_default();
+        let candidates = merge_candidates(from_command_lines, hubs, &running, listening_ports);
         (candidates, unreadable)
     }
 
@@ -366,7 +481,7 @@ mod discovery {
     }
 
     /// Every IPv4 port this pid is listening on, ascending. The server picks
-    /// its ports at launch and announces them nowhere else.
+    /// its ports at launch; only the hub build announces them, in its file.
     fn listening_ports(pid: u32) -> Vec<u16> {
         let mut size = 0u32;
         // SAFETY: the first call only reports the size; the second writes into
@@ -790,6 +905,7 @@ mod tests {
 
     const CSRF: &str = "11111111-2222-3333-4444-555555555555";
     const DECOY: &str = "99999999-8888-7777-6666-555555555555";
+    const HUB: &str = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
     fn summary_from(raw: &str) -> Summary {
         serde_json::from_str::<SummaryResponse>(raw)
@@ -886,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    fn matches_both_language_server_names_case_insensitively() {
+    fn matches_every_language_server_name_case_insensitively() {
         let utf16 = |name: &str| {
             let mut chars: Vec<u16> = name.encode_utf16().collect();
             chars.push(0);
@@ -899,8 +1015,171 @@ mod tests {
         assert!(is_language_server(&utf16(
             "LANGUAGE_SERVER_WINDOWS_ARM.EXE"
         )));
+        assert!(is_language_server(&utf16("Language_Server.exe")));
         assert!(!is_language_server(&utf16("language_server_linux_x64")));
         assert!(!is_language_server(&utf16("Antigravity IDE.exe")));
+    }
+
+    fn hub(pid: u32, csrf: &str, https_port: Option<u16>) -> HubFile {
+        HubFile {
+            pid,
+            csrf: csrf.to_string(),
+            https_port,
+        }
+    }
+
+    fn hub_json(pid: u32, csrf: &str, https_port: u16) -> String {
+        format!(
+            r#"{{"pid": {pid}, "httpsPort": {https_port}, "httpPort": {}, "lsVersion": "2.34.0", "csrfToken": "{csrf}"}}"#,
+            https_port + 1
+        )
+    }
+
+    fn temp_gemini_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("ai-quota-deck-antigravity-{name}-{unique}"))
+    }
+
+    fn write_file(path: &Path, raw: &str, written: SystemTime) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, raw).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(written)
+            .unwrap();
+    }
+
+    #[test]
+    fn reads_a_hub_file_and_keeps_only_its_tls_port() {
+        let parsed = parse_hub_file(&hub_json(37_560, HUB, 13_064)).unwrap();
+        assert_eq!(parsed.pid, 37_560);
+        assert_eq!(parsed.csrf, HUB);
+        assert_eq!(parsed.https_port, Some(13_064));
+    }
+
+    #[test]
+    fn rejects_a_hub_file_with_a_bad_token_or_missing_fields() {
+        for raw in [
+            hub_json(1, "short", 2),
+            hub_json(1, &format!("{HUB}0"), 2),
+            hub_json(1, "zzzzzzzz-bbbb-cccc-dddd-eeeeeeeeeeee", 2),
+            format!(r#"{{"httpsPort": 2, "csrfToken": "{HUB}"}}"#),
+            r#"{"pid": 1, "httpsPort": 2}"#.to_string(),
+            format!(r#"{{"pid": 1, "httpsPort": 70000, "csrfToken": "{HUB}"}}"#),
+            r#"{"pid": 1, "httpsPort": 2, "csrfTo"#.to_string(),
+            String::new(),
+        ] {
+            assert!(parse_hub_file(&raw).is_none(), "accepted {raw}");
+        }
+
+        // No usable TLS port still yields the token; the listening scan finds
+        // the port instead.
+        let portless = parse_hub_file(&format!(r#"{{"pid": 1, "csrfToken": "{HUB}"}}"#)).unwrap();
+        assert_eq!(portless.https_port, None);
+        let zero = parse_hub_file(&hub_json(1, HUB, 0)).unwrap();
+        assert_eq!(zero.https_port, None);
+    }
+
+    #[test]
+    fn reads_hub_files_only_from_antigravity_daemon_dirs_newest_first() {
+        let gemini = temp_gemini_dir("dirs");
+        let t0 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_790_000_000);
+        let later = t0 + Duration::from_secs(60);
+        for (path, raw, written) in [
+            ("antigravity/daemon/hub_101.json", hub_json(100, HUB, 100), t0),
+            ("antigravity-ide/daemon/hub_201.json", hub_json(200, HUB, 200), later),
+            ("windsurf/daemon/hub_301.json", hub_json(300, HUB, 300), later),
+            ("antigravityfoo/daemon/hub_401.json", hub_json(400, HUB, 400), later),
+            ("antigravity/daemon/notes.json", hub_json(500, HUB, 500), later),
+            ("antigravity/hub_601.json", hub_json(600, HUB, 600), later),
+            ("antigravity/daemon/hub_701.json", hub_json(700, "short", 700), later),
+        ] {
+            write_file(&gemini.join(path), &raw, written);
+        }
+
+        let pids: Vec<u32> = read_hub_files(&gemini).iter().map(|hub| hub.pid).collect();
+        assert_eq!(pids, [200, 100]);
+        assert!(read_hub_files(&gemini.join("missing")).is_empty());
+        std::fs::remove_dir_all(gemini).unwrap();
+    }
+
+    #[test]
+    fn the_newest_hub_file_wins_when_a_pid_was_reused() {
+        let gemini = temp_gemini_dir("reuse");
+        let daemon = gemini.join("antigravity").join("daemon");
+        let t0 = SystemTime::UNIX_EPOCH + Duration::from_secs(1_790_000_000);
+        write_file(&daemon.join("hub_1112.json"), &hub_json(100, DECOY, 1111), t0);
+        write_file(
+            &daemon.join("hub_2223.json"),
+            &hub_json(100, HUB, 2222),
+            t0 + Duration::from_secs(60),
+        );
+
+        let merged = merge_candidates(Vec::new(), read_hub_files(&gemini), &[100], |_| vec![]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].csrf, HUB);
+        assert_eq!(merged[0].ports, [2222]);
+        std::fs::remove_dir_all(gemini).unwrap();
+    }
+
+    #[test]
+    fn drops_hub_files_whose_server_has_exited() {
+        // The port layout measured on a live 2.34.0 hub server.
+        let hubs = vec![
+            hub(8_500, DECOY, Some(10_091)),
+            hub(37_560, HUB, Some(13_064)),
+            hub(46_476, DECOY, Some(11_215)),
+        ];
+        let merged = merge_candidates(Vec::new(), hubs, &[37_560], |_| vec![5_311, 13_064, 13_065]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].pid, 37_560);
+        assert_eq!(merged[0].csrf, HUB);
+        assert_eq!(merged[0].ports, [13_064, 5_311, 13_065]);
+        assert!(!merged[0].enable_lsp);
+
+        let exited = vec![hub(8_500, HUB, Some(1))];
+        assert!(merge_candidates(Vec::new(), exited, &[], |_| vec![]).is_empty());
+    }
+
+    #[test]
+    fn puts_the_announced_port_first_and_lists_each_port_once() {
+        assert_eq!(
+            hub_ports(Some(13_064), vec![5_311, 13_064, 13_065]),
+            [13_064, 5_311, 13_065]
+        );
+        assert_eq!(hub_ports(None, vec![5_311, 13_064]), [5_311, 13_064]);
+        assert_eq!(hub_ports(Some(13_064), vec![]), [13_064]);
+
+        let crowded = hub_ports(Some(9), vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(crowded.len(), 7);
+        assert!(crowded[..MAX_PORTS_PER_PROCESS].contains(&9));
+    }
+
+    #[test]
+    fn a_command_line_token_outranks_a_hub_file_for_the_same_pid() {
+        let from_command_line = vec![Candidate {
+            pid: 100,
+            csrf: CSRF.to_string(),
+            enable_lsp: true,
+            ports: vec![5_000],
+        }];
+        let hubs = vec![hub(100, DECOY, Some(6_000)), hub(200, HUB, Some(7_000))];
+        let mut merged = merge_candidates(from_command_line, hubs, &[100, 200], |_| vec![7_001]);
+        order_candidates(&mut merged);
+
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].pid, 200);
+        assert_eq!(merged[0].csrf, HUB);
+        assert_eq!(merged[0].ports, [7_000, 7_001]);
+        assert_eq!(merged[1].pid, 100);
+        assert_eq!(merged[1].csrf, CSRF);
+        assert_eq!(merged[1].ports, [5_000]);
+        assert!(merged[1].enable_lsp);
     }
 
     #[test]
