@@ -10,6 +10,7 @@ import {
   settleProviders,
 } from "./polling.js";
 import { displayedPercent, usageDisplayLabel } from "./widget-model.js";
+import { PALETTE_KEY, PALETTES } from "./palettes.js";
 const { invoke } = window.__TAURI__.core;
 const { emitTo, listen } = window.__TAURI__.event;
 
@@ -461,6 +462,7 @@ function renderProviderControls(missingProviders) {
   }
   panel.append(list);
   panel.append(renderUsageDisplay());
+  panel.append(renderPaletteChoice());
   if (bridgePath && missingProviders.some(({ optional }) => optional)) {
     panel.append(renderBridgeHelp());
   }
@@ -514,6 +516,68 @@ async function setUsageDisplay(mode, input) {
   }
   render();
   document.querySelector(`[data-usage-display="${mode}"]`)?.focus();
+}
+
+// ── Palette ─────────────────────────────────────────────────────────────────
+// The original look plus T3 Code's six themes. Light or dark still comes from
+// the theme button; the palette only picks which colours each of them uses.
+
+const ORIGINAL_PALETTE = {
+  id: "original",
+  label: "原版",
+  light: { canvas: "#f5f7fa", accent: "#27ae60" },
+  dark: { canvas: "#1a252f", accent: "#27ae60" },
+};
+
+function currentPalette() {
+  return document.documentElement.dataset.palette ?? ORIGINAL_PALETTE.id;
+}
+
+function applyPalette(id) {
+  const known = PALETTES.some((palette) => palette.id === id);
+  if (known) {
+    document.documentElement.dataset.palette = id;
+    localStorage.setItem(PALETTE_KEY, id);
+  } else {
+    delete document.documentElement.dataset.palette;
+    localStorage.removeItem(PALETTE_KEY);
+  }
+  void emitTo("widget", "widget-palette-changed", known ? id : null).catch(() => {});
+}
+
+function renderPaletteChoice() {
+  const row = el("div", "palette-option");
+  const copy = el("span", "usage-display-copy");
+  copy.append(
+    el("strong", null, "配色"),
+    el("span", null, "颜色取自 T3 Code 的六套主题；浅色深色用右上角的按钮切换。"),
+  );
+
+  const choices = el("div", "palette-choices");
+  choices.setAttribute("role", "radiogroup");
+  choices.setAttribute("aria-label", "配色");
+  for (const palette of [ORIGINAL_PALETTE, ...PALETTES]) {
+    const choice = el("label", "palette-choice");
+    choice.title = palette.label;
+    const input = el("input");
+    input.type = "radio";
+    input.name = "palette";
+    input.value = palette.id;
+    input.checked = currentPalette() === palette.id;
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      applyPalette(palette.id);
+    });
+    const swatch = el("span", "palette-swatch");
+    swatch.style.setProperty("--sw-light", palette.light.canvas);
+    swatch.style.setProperty("--sw-dark", palette.dark.canvas);
+    swatch.style.setProperty("--sw-light-accent", palette.light.accent);
+    swatch.style.setProperty("--sw-dark-accent", palette.dark.accent);
+    choice.append(input, swatch, el("span", "palette-name", palette.label));
+    choices.append(choice);
+  }
+  row.append(copy, choices);
+  return row;
 }
 
 function providerStatus(provider, visible) {
@@ -652,6 +716,7 @@ function publishWidgetSnapshot() {
     backoffUntil,
     updatedAt: lastUpdatedAt?.getTime() ?? null,
     theme: document.documentElement.dataset.theme,
+    palette: document.documentElement.dataset.palette ?? null,
   }).catch(() => {});
 }
 

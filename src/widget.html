@@ -13,9 +13,12 @@
             : matchMedia("(prefers-color-scheme: dark)").matches
               ? "dark"
               : "light";
+        const palette = localStorage.getItem("quota-deck-palette");
+        if (palette) document.documentElement.dataset.palette = palette;
       })();
     </script>
     <link rel="stylesheet" href="widget.css" />
+    <link rel="stylesheet" href="widget-palettes.css" />
   </head>
   <body>
     <section class="widget" aria-label="AI 额度小窗">

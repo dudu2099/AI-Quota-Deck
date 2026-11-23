@@ -303,8 +303,15 @@ centreStripEl.addEventListener("click", () => {
 await listen("quota-snapshot", ({ payload }) => {
   snapshot = payload;
   if (payload.theme) document.documentElement.dataset.theme = payload.theme;
+  if (payload.palette !== undefined) applyPalette(payload.palette);
   render();
 });
+function applyPalette(id) {
+  if (id) document.documentElement.dataset.palette = id;
+  else delete document.documentElement.dataset.palette;
+}
+
+await listen("widget-palette-changed", ({ payload }) => applyPalette(payload));
 await listen("widget-theme-changed", ({ payload }) => {
   document.documentElement.dataset.theme = payload;
 });

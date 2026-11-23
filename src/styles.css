@@ -552,6 +552,87 @@ body {
   outline-offset: 1px;
 }
 
+.palette-option {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 11px 11px;
+  border-top: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.palette-choices {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.palette-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.palette-choice input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Left half the light canvas, right half the dark one, and a dot in the
+   accent of whichever mode is showing. */
+.palette-swatch {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--sw-light) 50%, var(--sw-dark) 50%);
+  box-shadow: 0 0 0 2px transparent;
+  transition: box-shadow 0.16s ease;
+}
+
+.palette-swatch::after {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--sw-light-accent);
+  content: "";
+}
+
+:root[data-theme="dark"] .palette-swatch::after {
+  background: var(--sw-dark-accent);
+}
+
+.palette-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--label);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-choice input:checked + .palette-swatch {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.palette-choice input:checked ~ .palette-name {
+  color: var(--title);
+  font-weight: 650;
+}
+
+.palette-choice input:focus-visible + .palette-swatch {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .source-option {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) 36px;

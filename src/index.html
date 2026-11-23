@@ -15,9 +15,12 @@
             : matchMedia("(prefers-color-scheme: dark)").matches
               ? "dark"
               : "light";
+        const palette = localStorage.getItem("quota-deck-palette");
+        if (palette) document.documentElement.dataset.palette = palette;
       })();
     </script>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="palettes.css" />
   </head>
   <body>
     <div class="deck">
