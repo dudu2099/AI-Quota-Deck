@@ -25,7 +25,7 @@ Codex、Antigravity、Claude Code、Gemini、Grok、Grok Bot の利用枠があ�
 
 ### ストリップ
 <p align="center">
-  <img src="./assets/readme/strip.png" alt="Ocean パレットのストリップ" width="636">
+  <img src="./assets/readme/strip.png" alt="Ocean パレットのストリップ" width="778">
 </p>
 
 ### パレット

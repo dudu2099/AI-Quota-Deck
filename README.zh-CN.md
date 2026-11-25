@@ -25,7 +25,7 @@ Windows 托盘里的 AI 额度看板：Codex、Antigravity、Claude Code、Gemin
 
 ### 长条
 <p align="center">
-  <img src="./assets/readme/strip.png" alt="Ocean 配色的长条" width="636">
+  <img src="./assets/readme/strip.png" alt="Ocean 配色的长条" width="778">
 </p>
 
 ### 配色

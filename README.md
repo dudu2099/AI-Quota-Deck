@@ -25,7 +25,7 @@ A Windows tray dashboard that shows how much of each AI allowance is left and wh
 
 ### Strip
 <p align="center">
-  <img src="./assets/readme/strip.png" alt="Strip in the Ocean palette" width="636">
+  <img src="./assets/readme/strip.png" alt="Strip in the Ocean palette" width="778">
 </p>
 
 ### Palettes
