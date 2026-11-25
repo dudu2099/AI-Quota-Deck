@@ -15,6 +15,15 @@ use crate::quota::{http_failure, now, ProviderQuota, QuotaWindow, Stale};
 
 const PROVIDER: &str = "grok_bot";
 const USAGE_URL: &str = "https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus";
+/// Grok Bot's per-day usage report. It is the only place its tokens are
+/// counted: the app itself never sees a token count, so nothing on this
+/// machine records one.
+const DAILY_SPEND_URL: &str =
+    "https://api2.cursor.sh/aiserver.v1.DashboardService/GetDailySpendByCategory";
+// Enum numbers from Grok Bot's own bundle: SpendGroupByCategory.MODEL and
+// SpendType.ALL. The request mirrors the one Grok Bot sends for its usage view.
+const GROUP_BY_MODEL: i32 = 1;
+const SPEND_TYPE_ALL: i32 = 3;
 const REQUEST_TIMEOUT_SECONDS: u64 = 10;
 const SNAPSHOT_MAX_AGE_SECONDS: i64 = 24 * 60 * 60;
 const FALLBACK_CLIENT_VERSION: &str = "0.29.0";
@@ -495,24 +504,8 @@ pub async fn fetch() -> ProviderQuota {
         Ok(client) => client,
         Err(error) => return fallback(&format!("无法创建 Grok Bot 客户端：{error}")),
     };
-    let checksum = checksum_at(
-        &credentials.machine_id,
-        chrono::Utc::now().timestamp_millis(),
-    );
-    let response = match client
-        .post(USAGE_URL)
-        .header(
-            "authorization",
-            format!("Bearer {}", credentials.access_token),
-        )
+    let response = match signed(client.post(USAGE_URL), &credentials)
         .header("content-type", "application/proto")
-        .header("connect-protocol-version", "1")
-        .header("x-cursor-checksum", checksum)
-        .header("x-cursor-client-type", "sand")
-        .header("x-cursor-client-version", FALLBACK_CLIENT_VERSION)
-        .header("x-sand-box-namespace", "prod")
-        .header("x-ghost-mode", "true")
-        .header("x-request-id", uuid_like_request_id())
         .body(Vec::new())
         .send()
         .await
@@ -549,6 +542,104 @@ pub async fn fetch() -> ProviderQuota {
         let _ = write_snapshot(plan, windows);
     }
     quota
+}
+
+/// The headers Grok Bot itself sends with every dashboard request.
+fn signed(request: reqwest::RequestBuilder, credentials: &Credentials) -> reqwest::RequestBuilder {
+    let checksum = checksum_at(
+        &credentials.machine_id,
+        chrono::Utc::now().timestamp_millis(),
+    );
+    request
+        .header(
+            "authorization",
+            format!("Bearer {}", credentials.access_token),
+        )
+        .header("connect-protocol-version", "1")
+        .header("x-cursor-checksum", checksum)
+        .header("x-cursor-client-type", "sand")
+        .header("x-cursor-client-version", FALLBACK_CLIENT_VERSION)
+        .header("x-sand-box-namespace", "prod")
+        .header("x-ghost-mode", "true")
+        .header("x-request-id", uuid_like_request_id())
+}
+
+/// Every token Grok Bot spent in `[start_ms, end_ms)`, from its server's
+/// daily usage report. The report buckets by UTC day but filters on the exact
+/// instants asked for, so a day that begins at Beijing midnight is counted as
+/// such. One total per day is all it gives: no cache split, no call count.
+pub async fn tokens_between(start_ms: i64, end_ms: i64) -> Result<u64, String> {
+    let profile = profile_dir().ok_or("找不到 Grok Bot 的配置目录")?;
+    if !profile.join("sand-secrets.json").is_file() || !profile.join("Local State").is_file() {
+        return Err("没找到 Grok Bot 的登录记录，打开 Grok Bot 登录一次".to_string());
+    }
+    let credentials = tauri::async_runtime::spawn_blocking(move || load_credentials_from(&profile))
+        .await
+        .map_err(|error| format!("无法读取 Grok Bot 的登录记录：{error}"))??;
+    if jwt_exp(&credentials.access_token).is_some_and(|expiry| expiry <= now()) {
+        return Err("Grok Bot 的访问令牌过期了，打开 Grok Bot 让它刷新".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECONDS))
+        .build()
+        .map_err(|error| format!("无法创建 Grok Bot 客户端：{error}"))?;
+    let body = serde_json::json!({
+        "periodStartMs": start_ms.to_string(),
+        "periodEndMs": end_ms.to_string(),
+        "groupBy": GROUP_BY_MODEL,
+        "spendType": SPEND_TYPE_ALL,
+        "clientType": "grok-bot",
+        "products": ["sand"],
+    });
+    let response = signed(client.post(DAILY_SPEND_URL), &credentials)
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .map_err(|error| format!("Grok Bot 用量请求失败：{error}"))?;
+    if response.status() == reqwest::StatusCode::UNAUTHORIZED
+        || response.status() == reqwest::StatusCode::FORBIDDEN
+    {
+        return Err("Grok Bot 拒绝了保存的访问令牌，打开 Grok Bot 重新登录".to_string());
+    }
+    if !response.status().is_success() {
+        return Err(http_failure(response.status(), "Grok Bot 用量服务"));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("无法读取 Grok Bot 用量服务的返回：{error}"))?;
+    daily_tokens(&bytes)
+}
+
+/// Sum `dailySpend[].totalTokens` of a GetDailySpendByCategory reply. Proto3
+/// JSON writes 64-bit integers as strings and leaves zeros out.
+fn daily_tokens(body: &[u8]) -> Result<u64, String> {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Report {
+        #[serde(default)]
+        daily_spend: Vec<Day>,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Day {
+        total_tokens: Option<serde_json::Value>,
+    }
+
+    let report: Report = serde_json::from_slice(body)
+        .map_err(|error| format!("无法解析 Grok Bot 用量服务的返回：{error}"))?;
+    report.daily_spend.iter().try_fold(0_u64, |sum, day| {
+        let tokens = match &day.total_tokens {
+            None => Some(0),
+            Some(serde_json::Value::String(text)) => text.parse::<u64>().ok(),
+            Some(serde_json::Value::Number(number)) => number.as_u64(),
+            Some(_) => None,
+        }
+        .ok_or("Grok Bot 用量服务返回了看不懂的 token 数")?;
+        Ok(sum.saturating_add(tokens))
+    })
 }
 
 fn uuid_like_request_id() -> String {
@@ -717,5 +808,34 @@ mod tests {
         assert_eq!(provider, PROVIDER);
         assert_eq!(windows.len(), 1);
         assert_eq!(windows[0].label, "Weekly");
+    }
+
+    #[test]
+    fn sums_the_daily_report_whether_counts_are_strings_or_numbers() {
+        let body = br#"{
+            "categories": ["grok-bot-default", "grok-bot-automation"],
+            "dailySpend": [
+                {"category": "grok-bot-default", "day": "1795564800000", "totalTokens": "43374442"},
+                {"category": "grok-bot-automation", "day": "1795564800000", "totalTokens": 1000},
+                {"category": "grok-bot-cua", "day": "1795564800000", "spendCents": 0}
+            ]
+        }"#;
+        assert_eq!(daily_tokens(body), Ok(43_375_442));
+        assert_eq!(daily_tokens(b"{}"), Ok(0), "a day with nothing spent");
+        assert_eq!(daily_tokens(br#"{"startDate":"1"}"#), Ok(0));
+        assert!(daily_tokens(br#"{"dailySpend":[{"totalTokens":"-3"}]}"#).is_err());
+        assert!(daily_tokens(br#"{"dailySpend":[{"totalTokens":true}]}"#).is_err());
+        assert!(daily_tokens(b"not json").is_err());
+    }
+
+    #[test]
+    #[ignore = "manual integration check against the locally installed Grok Bot"]
+    fn installed_grok_bot_reports_tokens_since_beijing_midnight() {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let offset_ms = 8 * 60 * 60 * 1000;
+        let start_ms = (now_ms + offset_ms).div_euclid(86_400_000) * 86_400_000 - offset_ms;
+        let tokens = tauri::async_runtime::block_on(tokens_between(start_ms, now_ms))
+            .expect("the installed Grok Bot answered");
+        println!("Grok Bot tokens since Beijing midnight: {tokens}");
     }
 }

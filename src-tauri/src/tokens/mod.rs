@@ -32,7 +32,7 @@ const ROWS: [(&str, &str); 4] = [
     ("claude-code", "Claude Code"),
     ("codex", "Codex"),
     ("gemini", "Gemini"),
-    ("grok", "Grok"),
+    ("grok", "Grok Bot"),
 ];
 
 /// One day's token use, as the dashboard renders it.
@@ -62,6 +62,13 @@ pub struct TokenRow {
     pub cache_read: u64,
     /// Model calls counted today.
     pub requests: u64,
+    /// Part of `total` in neither `fresh` nor `cache_read`: Grok Bot's server
+    /// reports one figure a day with no cache split.
+    pub unsplit: u64,
+    /// Set when the row's figure is older than `observed_at`. Grok Bot's comes
+    /// from its server, which is asked at most every `BOT_REFRESH_SECONDS`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_of: Option<String>,
     pub sources: Vec<TokenSource>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weekly_points: Option<WeeklyPoints>,
@@ -76,9 +83,9 @@ pub struct TokenSource {
     pub requests: u64,
 }
 
-/// Grok Bot reports no tokens at all, only how much of a weekly allowance is
-/// gone. What it spent today is therefore the climb of that percentage since
-/// the first reading of the day — see grok.rs.
+/// How much of Grok Bot's weekly allowance went today: the climb of that
+/// percentage since the first reading of the day — see grok.rs. Shown beside
+/// its tokens, since the allowance is what actually runs out.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct WeeklyPoints {
     pub product: String,
@@ -134,6 +141,8 @@ impl TokenRow {
             fresh: tally.fresh,
             cache_read: tally.cache_read,
             requests: tally.requests,
+            unsplit: 0,
+            as_of: None,
             sources,
             weekly_points: None,
         }
@@ -282,12 +291,26 @@ impl Engine {
         self.day_start = Some(day_start);
     }
 
+    /// Everything but Grok Bot, whose figure needs the network; see
+    /// `snapshot_with`.
+    #[cfg(test)]
     fn snapshot(
         &mut self,
         paths: &Paths,
         offset_minutes: i32,
         window: Window,
         now: i64,
+    ) -> TokenDay {
+        self.snapshot_with(paths, offset_minutes, window, now, None)
+    }
+
+    fn snapshot_with(
+        &mut self,
+        paths: &Paths,
+        offset_minutes: i32,
+        window: Window,
+        now: i64,
+        grok_bot: Option<&BotTokens>,
     ) -> TokenDay {
         let started = Instant::now();
         self.roll_to(window.start);
@@ -325,7 +348,12 @@ impl Engine {
                     (total, rows)
                 }),
             ),
-            grok_row(grok_cli, weekly_points),
+            grok_row(
+                grok_cli,
+                weekly_points,
+                grok_bot.filter(|bot| bot.day_start == window.start),
+                offset_minutes,
+            ),
         ];
 
         TokenDay {
@@ -363,24 +391,129 @@ impl Engine {
     }
 }
 
-/// Grok has two halves with nothing in common: the CLI logs tokens, Grok Bot
-/// only a weekly percentage. The row is worth showing if either is there.
-fn grok_row(cli: Result<Tally, String>, weekly_points: Option<WeeklyPoints>) -> TokenRow {
+/// Grok Bot's tokens come from its server, one total a day; the Grok CLI, if
+/// it is used at all, logs its own and is folded in. The row stands or falls
+/// with Grok Bot: without its figure the row is unavailable, so the sum names
+/// Grok Bot as missing instead of passing the CLI's few tokens off as all of it.
+fn grok_row(
+    cli: Result<Tally, String>,
+    weekly_points: Option<WeeklyPoints>,
+    bot: Option<&BotTokens>,
+    offset_minutes: i32,
+) -> TokenRow {
     let (id, label) = ROWS[3];
-    match (cli, weekly_points) {
-        (Ok(tally), weekly_points) => TokenRow {
-            weekly_points,
-            ..TokenRow::ok(id, label, tally, vec![TokenSource::new("命令行", tally)])
-        },
-        (Err(_), Some(points)) => TokenRow {
-            weekly_points: Some(points),
-            ..TokenRow::ok(id, label, Tally::default(), Vec::new())
-        },
-        (Err(reason), None) => {
-            let reason = format!("{reason}；Grok Bot 今天也还没有读数");
-            TokenRow::unavailable(id, label, reason)
+    let bot = match bot {
+        Some(bot) => bot.tokens.clone().map(|tokens| (tokens, bot.as_of)),
+        None => Err(NO_BOT_READING.to_string()),
+    };
+    let (tokens, as_of) = match bot {
+        Ok(reading) => reading,
+        Err(reason) => {
+            return TokenRow {
+                weekly_points,
+                ..TokenRow::unavailable(id, label, reason)
+            }
+        }
+    };
+    // No ~/.grok at all is the usual case, not a problem worth a word.
+    let cli = cli.unwrap_or_default();
+    let mut sources = vec![TokenSource {
+        label: "Grok Bot".to_string(),
+        total: tokens,
+        fresh: 0,
+        cache_read: 0,
+        requests: 0,
+    }];
+    if cli.total > 0 {
+        sources.push(TokenSource::new("命令行", cli));
+    }
+    TokenRow {
+        total: tokens + cli.total,
+        unsplit: tokens,
+        as_of: Some(rfc3339(as_of, offset_minutes)),
+        weekly_points,
+        ..TokenRow::ok(id, label, cli, sources)
+    }
+}
+
+const NO_BOT_READING: &str = "还没读到 Grok Bot 的用量";
+
+/// Grok Bot's tokens for one day, as its server last reported them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BotTokens {
+    pub day_start: i64,
+    /// The last figure for this day, or why there is none yet.
+    pub tokens: Result<u64, String>,
+    /// When `tokens` was fetched (unix seconds).
+    pub as_of: i64,
+}
+
+/// The dashboard asks every minute; Grok Bot's server is asked at most this
+/// often, and in between the last figure for the day stands.
+const BOT_REFRESH_SECONDS: i64 = 5 * 60;
+
+#[derive(Debug, Default)]
+struct BotState {
+    day_start: i64,
+    attempted_at: Option<i64>,
+    /// The latest figure for `day_start` and when it was fetched.
+    last: Option<(u64, i64)>,
+    error: Option<String>,
+}
+
+impl BotState {
+    fn due(&self, day_start: i64, now: i64) -> bool {
+        self.day_start != day_start
+            || self
+                .attempted_at
+                .is_none_or(|at| now - at >= BOT_REFRESH_SECONDS || now < at)
+    }
+
+    /// Record one attempt. A failure keeps the day's last good figure, which
+    /// is still right as far as it goes.
+    fn record(&mut self, day_start: i64, now: i64, result: Result<u64, String>) {
+        if self.day_start != day_start {
+            *self = Self {
+                day_start,
+                ..Self::default()
+            };
+        }
+        self.attempted_at = Some(now);
+        match result {
+            Ok(tokens) => {
+                self.last = Some((tokens, now));
+                self.error = None;
+            }
+            Err(error) => self.error = Some(error),
         }
     }
+
+    fn reading(&self) -> BotTokens {
+        match (self.last, &self.error) {
+            (Some((tokens, at)), _) => BotTokens {
+                day_start: self.day_start,
+                tokens: Ok(tokens),
+                as_of: at,
+            },
+            (None, error) => BotTokens {
+                day_start: self.day_start,
+                tokens: Err(error.clone().unwrap_or_else(|| NO_BOT_READING.to_string())),
+                as_of: self.attempted_at.unwrap_or_default(),
+            },
+        }
+    }
+}
+
+static BOT_STATE: tokio::sync::Mutex<Option<BotState>> = tokio::sync::Mutex::const_new(None);
+
+async fn grok_bot_tokens(day_start: i64, now: i64) -> BotTokens {
+    let mut guard = BOT_STATE.lock().await;
+    let state = guard.get_or_insert_with(BotState::default);
+    if state.due(day_start, now) {
+        let result = crate::grok_bot::tokens_between(day_start * 1000, now * 1000).await;
+        state.record(day_start, now, result);
+    }
+    state.reading()
 }
 
 /// Run one source so that a panic costs that row and nothing else. The
@@ -403,16 +536,20 @@ static ENGINE: Mutex<Option<Engine>> = Mutex::new(None);
 
 #[tauri::command]
 pub async fn token_usage_today() -> TokenDay {
+    // Grok Bot first: it is a network request, the rest is local files.
+    let now = Utc::now().timestamp();
+    let offset = Paths::system().offset_minutes();
+    let grok_bot = grok_bot_tokens(day_start(now, offset), now).await;
     // The first call reads hundreds of megabytes. That is blocking file IO and
     // must not sit on an async worker, where it would stall every other
     // command the dashboard sends meanwhile.
-    match tauri::async_runtime::spawn_blocking(today).await {
+    match tauri::async_runtime::spawn_blocking(move || today(&grok_bot)).await {
         Ok(day) => day,
         Err(_) => failed_day(CRASHED),
     }
 }
 
-fn today() -> TokenDay {
+fn today(grok_bot: &BotTokens) -> TokenDay {
     let paths = Paths::system();
     let offset = paths.offset_minutes();
     let now = Utc::now().timestamp();
@@ -433,7 +570,7 @@ fn today() -> TokenDay {
     });
     engine
         .get_or_insert_with(Engine::default)
-        .snapshot(&paths, offset, window, now)
+        .snapshot_with(&paths, offset, window, now, Some(grok_bot))
 }
 
 fn failed_day(reason: &str) -> TokenDay {
@@ -659,6 +796,115 @@ mod tests {
         let missing = &json["rows"][1];
         assert_eq!(missing["status"], "unavailable");
         assert_eq!(missing["reason"], "没找到 ~/.codex/sessions");
+    }
+
+    fn cli(total: u64, cache_read: u64) -> Tally {
+        Tally {
+            total,
+            fresh: total - cache_read,
+            cache_read,
+            requests: 2,
+        }
+    }
+
+    fn bot(day_start: i64, tokens: Result<u64, String>, as_of: i64) -> BotTokens {
+        BotTokens {
+            day_start,
+            tokens,
+            as_of,
+        }
+    }
+
+    #[test]
+    fn grok_bot_tokens_lead_the_row_and_keep_out_of_the_cache_split() {
+        let start = unix("2026-11-24T16:00:00Z");
+        let reading = bot(start, Ok(43_374_442), unix("2026-11-24T17:39:00Z"));
+        let row = grok_row(Ok(cli(1_000, 400)), None, Some(&reading), BEIJING);
+        assert_eq!(row.label, "Grok Bot");
+        assert_eq!(row.status, "ok");
+        assert_eq!(row.total, 43_375_442);
+        assert_eq!(row.unsplit, 43_374_442);
+        assert_eq!((row.fresh, row.cache_read, row.requests), (600, 400, 2));
+        assert_eq!(row.as_of.as_deref(), Some("2026-11-25T01:39:00+08:00"));
+        let labels: Vec<_> = row.sources.iter().map(|s| (s.label.as_str(), s.total)).collect();
+        assert_eq!(labels, [("Grok Bot", 43_374_442), ("命令行", 1_000)]);
+
+        // No ~/.grok, or an idle CLI: Grok Bot alone, no CLI source.
+        let alone = grok_row(Err("没找到 ~/.grok".into()), None, Some(&reading), BEIJING);
+        assert_eq!((alone.status.as_str(), alone.total), ("ok", 43_374_442));
+        assert_eq!(alone.sources.len(), 1);
+        assert!(alone.reason.is_none());
+    }
+
+    #[test]
+    fn without_grok_bot_the_row_is_unavailable_even_if_the_cli_counted() {
+        let start = unix("2026-11-24T16:00:00Z");
+        let failed = bot(start, Err("Grok Bot 的访问令牌过期了".into()), start);
+        let row = grok_row(Ok(cli(1_000, 0)), None, Some(&failed), BEIJING);
+        assert_eq!(row.status, "unavailable");
+        assert_eq!(row.reason.as_deref(), Some("Grok Bot 的访问令牌过期了"));
+        assert_eq!(row.total, 0);
+
+        let never = grok_row(Ok(cli(1_000, 0)), None, None, BEIJING);
+        assert_eq!(never.reason.as_deref(), Some(NO_BOT_READING));
+    }
+
+    #[test]
+    fn a_grok_bot_figure_from_another_day_is_not_used() {
+        let home = scratch_dir("bot-other-day");
+        let now = unix("2026-11-24T17:00:00Z");
+        let start = day_start(now, BEIJING);
+        let yesterday = bot(start - DAY_SECONDS, Ok(9_999), now - 60);
+        let day = Engine::default().snapshot_with(
+            &paths_for(&home),
+            BEIJING,
+            Window {
+                start,
+                end: start + DAY_SECONDS,
+            },
+            now,
+            Some(&yesterday),
+        );
+        assert_eq!(day.rows[3].status, "unavailable");
+        let today = bot(start, Ok(9_999), now - 60);
+        let day = Engine::default().snapshot_with(
+            &paths_for(&home),
+            BEIJING,
+            Window {
+                start,
+                end: start + DAY_SECONDS,
+            },
+            now,
+            Some(&today),
+        );
+        assert_eq!((day.rows[3].status.as_str(), day.rows[3].total), ("ok", 9_999));
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn grok_bot_is_asked_at_most_every_five_minutes_and_keeps_its_last_figure() {
+        let day = unix("2026-11-24T16:00:00Z");
+        let t0 = day + 3_600;
+        let mut state = BotState::default();
+        assert!(state.due(day, t0), "never asked");
+        state.record(day, t0, Ok(100));
+        assert!(!state.due(day, t0 + 60));
+        assert!(!state.due(day, t0 + BOT_REFRESH_SECONDS - 1));
+        assert!(state.due(day, t0 + BOT_REFRESH_SECONDS));
+        assert!(state.due(day, t0 - 1), "the clock went back");
+        assert!(state.due(day + DAY_SECONDS, t0 + 60), "a new day");
+
+        // A failed attempt keeps the day's last good figure and its time.
+        state.record(day, t0 + 300, Err("网络断了".into()));
+        assert_eq!(state.reading(), bot(day, Ok(100), t0));
+        assert!(!state.due(day, t0 + 360), "a failure also waits its turn");
+        state.record(day, t0 + 600, Ok(250));
+        assert_eq!(state.reading(), bot(day, Ok(250), t0 + 600));
+
+        // The next day starts empty; a failure then has nothing to fall back on.
+        let next = day + DAY_SECONDS;
+        state.record(next, next + 10, Err("网络断了".into()));
+        assert_eq!(state.reading(), bot(next, Err("网络断了".into()), next + 10));
     }
 
     #[test]

@@ -28,10 +28,11 @@ export function formatTokens(count) {
 
 /** Today's figures added across every source that answered. A source that
  *  could not be read adds nothing and is named in `missing`, so a total that
- *  is short says why. Grok Bot's weekly points are a percentage, not tokens,
- *  and stay out of it. */
+ *  is short says why. `unsplit` is the part with no cache split (Grok Bot's
+ *  server gives one figure a day). Grok Bot's weekly points are a percentage,
+ *  not tokens, and stay out of it. */
 export function tokenTotals(rows = []) {
-  const totals = { total: 0, fresh: 0, cache_read: 0, requests: 0, missing: [] };
+  const totals = { total: 0, fresh: 0, cache_read: 0, unsplit: 0, requests: 0, missing: [] };
   for (const row of rows) {
     if (row.status !== "ok") {
       totals.missing.push(row.label);
@@ -40,6 +41,7 @@ export function tokenTotals(rows = []) {
     totals.total += row.total || 0;
     totals.fresh += row.fresh || 0;
     totals.cache_read += row.cache_read || 0;
+    totals.unsplit += row.unsplit || 0;
     totals.requests += row.requests || 0;
   }
   return totals;

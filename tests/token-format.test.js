@@ -16,23 +16,32 @@ test("totals add every source that answered and name the ones that did not", () 
     { label: "Codex", status: "ok", total: 96, fresh: 2, cache_read: 94, requests: 694 },
     { label: "Gemini", status: "unavailable", total: 0, fresh: 0, cache_read: 0, requests: 0 },
     {
-      label: "Grok",
+      label: "Grok Bot",
       status: "ok",
-      total: 3,
+      total: 503,
       fresh: 3,
       cache_read: 0,
+      unsplit: 500,
       requests: 1,
       weekly_points: { points: 4 },
     },
   ];
   assert.deepEqual(tokenTotals(rows), {
-    total: 949,
+    total: 1449,
     fresh: 26,
     cache_read: 923,
+    unsplit: 500,
     requests: 4563,
     missing: ["Gemini"],
   });
-  assert.deepEqual(tokenTotals(), { total: 0, fresh: 0, cache_read: 0, requests: 0, missing: [] });
+  assert.deepEqual(tokenTotals(), {
+    total: 0,
+    fresh: 0,
+    cache_read: 0,
+    unsplit: 0,
+    requests: 0,
+    missing: [],
+  });
 });
 
 test("counts under ten thousand print as they are", () => {

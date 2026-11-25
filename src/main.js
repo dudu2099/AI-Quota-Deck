@@ -959,32 +959,40 @@ function deferClaudeAfterResume() {
 }
 
 // ── Today's tokens ─────────────────────────────────────────────────────────
-// Counted on this machine from each tool's own logs; nothing is sent anywhere.
-// Rust reads only what was appended since the last call, so a minute's cadence
-// is cheap — but there is no point reading logs for a panel nobody can see.
+// Counted on this machine from each tool's own logs, except Grok Bot, which
+// keeps none: its figure is its server's own daily report, fetched with the
+// login Grok Bot already holds, at most every five minutes. Rust reads only
+// what was appended since the last call, so a minute's cadence is cheap — but
+// there is no point reading logs for a panel nobody can see.
 
 function tokenNote(row) {
-  if (row.total === 0 && !row.weekly_points) return "今天还没用";
+  const unsplit = row.unsplit || 0;
+  const offset = tokenDay.utc_offset_minutes;
   const parts = [];
-  if (row.id === "grok") {
-    if (row.total > 0) parts.push(`命令行 ${formatTokens(row.total)}`);
+  if (unsplit > 0) {
+    // Grok Bot's server gives one figure a day, with no cache split.
+    parts.push("不分新算和缓存");
+    if (row.total > unsplit) parts.push(`含命令行 ${formatTokens(row.total - unsplit)}`);
   } else if (row.total > 0) {
     parts.push(`新算 ${formatTokens(row.fresh)}`, `读缓存 ${formatTokens(row.cache_read)}`);
+    if (row.requests > 0) parts.push(`${row.requests} 次`);
+  } else if (!row.weekly_points) {
+    return "今天还没用";
+  } else {
+    parts.push("今天还没用");
   }
-  if (row.requests > 0) parts.push(`${row.requests} 次`);
-  let note = parts.join(" · ");
 
-  // Grok Bot keeps no token counts anywhere this machine can read; the honest
-  // daily figure is how far its weekly allowance moved today.
+  // The weekly allowance is what actually runs out, so its daily climb stays.
   const weekly = row.weekly_points;
   if (weekly) {
-    const since = weekly.from_day_start
-      ? ""
-      : `（从 ${clockAt(weekly.since, tokenDay.utc_offset_minutes)} 起）`;
-    const bot = `${weekly.product} 不记 token，今天用掉周额度 ${formatPoints(weekly.points)} 个点${since}`;
-    note = note ? `${note}；${bot}` : bot;
+    const since = weekly.from_day_start ? "" : `（${clockAt(weekly.since, offset)} 起）`;
+    parts.push(`周额度 ${formatPoints(weekly.points)} 点${since}`);
   }
-  return note;
+  // Grok Bot's figure can trail the others by a few minutes; say so when it does.
+  if (row.as_of && clockAt(row.as_of, offset) !== clockAt(tokenDay.observed_at, offset)) {
+    parts.push(`截至 ${clockAt(row.as_of, offset)}`);
+  }
+  return parts.join(" · ");
 }
 
 function renderTokenRow(row) {
@@ -1024,7 +1032,9 @@ function renderTokenSum(rows) {
   if (unit) figure.append(el("span", "unit", unit));
   head.append(figure);
 
-  let note = `新算 ${formatTokens(totals.fresh)} · 读缓存 ${formatTokens(totals.cache_read)} · ${totals.requests} 次`;
+  const split = [`新算 ${formatTokens(totals.fresh)}`, `读缓存 ${formatTokens(totals.cache_read)}`];
+  if (totals.unsplit > 0) split.push(`不分 ${formatTokens(totals.unsplit)}`);
+  let note = `${split.join(" · ")} · ${totals.requests} 次`;
   if (totals.missing.length) note += `（${totals.missing.join("、")} 读不到，没算进去）`;
   item.append(head, el("p", "row-note", note));
   return item;

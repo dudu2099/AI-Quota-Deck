@@ -158,7 +158,8 @@ function renderTokenSegment(tokens) {
   const zone = dayZoneLabel(tokens.utc_offset_minutes);
   const lines = [
     `今日 token（${zone}零点起，${clockAt(tokens.observed_at, tokens.utc_offset_minutes)} 更新）`,
-    `合计 ${formatTokens(tokens.total)} · 新算 ${formatTokens(tokens.fresh)}`,
+    `合计 ${formatTokens(tokens.total)} · 新算 ${formatTokens(tokens.fresh)}` +
+      (tokens.unsplit > 0 ? ` · 不分 ${formatTokens(tokens.unsplit)}` : ""),
     tokens.rows
       .map((source) => `${source.label} ${source.status === "ok" ? formatTokens(source.total) : "读不到"}`)
       .join(" · "),
