@@ -43,7 +43,7 @@ A Windows tray dashboard that shows how much of each AI allowance is left and wh
 - **A clearer strip.** Full provider names, then 剩 (left) or 已用 (used) and the percentage. The reset countdown moved into the hover tooltip to keep the strip short.
 - **Move the strip to the top.** The strip's first button moves it to the top centre of the screen. It replaces the pin-above-the-taskbar button.
 - **Antigravity 2.34 and later.** Newer Antigravity versions write their connection details to `~/.gemini/antigravity/daemon/`; the deck now reads them there. The Antigravity card shows only the Gemini allowance.
-- **Today's tokens.** A **今日 Token** section totals the tokens you used today in Claude Code, Codex, Gemini, and the Grok CLI, counted from their logs on this computer. The strip ends with the day's total. See [Today's tokens](#todays-tokens).
+- **Today's tokens.** A **今日 Token** section totals the tokens you used today in Claude Code, Codex, Gemini, and Grok Bot (plus the Grok CLI), counted from their logs on this computer and, for Grok Bot, from its own usage report. The strip ends with the day's total. See [Today's tokens](#todays-tokens).
 
 ---
 
@@ -74,17 +74,17 @@ Also included from the original:
 
 ## Today's tokens
 
-The **今日 Token** section at the bottom of the dashboard shows a total and one row per tool. Each row counts every model call made since midnight, read from that tool's own files on this computer:
+The **今日 Token** section at the bottom of the dashboard shows a total and one row per tool. Each row counts every model call made since midnight, read from that tool's own files on this computer. Grok Bot keeps no files to read, so its row asks Grok Bot's server:
 
 | Row | Read from | Counted |
 |---|---|---|
 | **Claude Code** | Session logs in `~/.claude/projects`, subagents included | Once per response |
 | **Codex** | Session logs in `~/.codex/sessions` and `~/.codex/archived_sessions` | Once per response |
 | **Gemini** | Antigravity's conversation databases under `~/.gemini/`, for the IDE, the `agy` CLI, and T3 | Once per model call |
-| **Grok** | The Grok CLI's `usage.json` files in `~/.grok/sessions` | Once per turn |
+| **Grok Bot** | Grok Bot's own daily usage report, fetched with the sign-in Grok Bot already keeps, at most every five minutes; plus the Grok CLI's `usage.json` files in `~/.grok/sessions` if you use it | One total per day |
 
 - **The big figure is every token processed, cache reads included**, the way ccusage counts. The line under it splits that into 新算 (newly processed) and 读缓存 (cache reads), plus the number of calls. Cache reads are usually most of the total.
-- **Grok Bot keeps no token counts.** Its line instead shows how many points of the weekly allowance today used, counted from the deck's first reading that day.
+- **Grok Bot gives one figure.** Its server reports a single daily total with no cache split and no call count, so the row reads 不分新算和缓存 (not split) and the total line lists it as 不分. The row also shows how many points of the weekly allowance went today, counted from the deck's first reading that day.
 - **Hover for detail.** The Gemini row splits its figure into IDE, agy, and T3. In the strip, the **TOKEN** segment shows the total, and hovering it lists each tool.
 - **When it refreshes.** Every minute while the dashboard, widget, or strip is showing. The first read scans today's logs; after that the deck reads only what was appended.
 - **When the day starts.** Midnight in the computer's time zone. To count from midnight in another zone, create `%LOCALAPPDATA%\ai-quota-deck\token-usage.json` with the offset from UTC in minutes, for example `{"day_utc_offset_minutes": 480}` for UTC+8.
@@ -195,7 +195,7 @@ AI Quota Deck has no telemetry and uploads nothing.
 - Grok Bot's Chromium-encrypted local access token is unlocked with Windows DPAPI only for the live usage request. Its refresh token is never deserialized, decrypted, used, cached, or sent anywhere by the deck.
 - The bridge can read only `gemini.google.com` and `grok.com`.
 - Only quota values, reset times, provider/account slots, and observation times reach the app. Cookies and page tokens stay in the browser.
-- Today's tokens are counted from local files only, and the Antigravity databases are opened read-only. The deck keeps token counts and timestamps, never message content.
+- Today's tokens are counted from local files, except Grok Bot's: those come from its own usage report, read with the same short-lived access token as its quota, at most every five minutes. The Antigravity databases are opened read-only. The deck keeps token counts and timestamps, never message content.
 
 ---
 
@@ -205,7 +205,7 @@ These providers expose usage through undocumented internal endpoints. A provider
 
 If the same browser provider is signed in with multiple accounts, the most recently reported account is shown. Account pinning is not implemented yet.
 
-Today's tokens depend on each tool's local log format, none of which is documented; Gemini's figure relies on Antigravity's internal database format. Work done in cloud sessions never reaches this computer and is not counted.
+Today's tokens depend on each tool's local log format, none of which is documented; Gemini's figure relies on Antigravity's internal database format, and Grok Bot's on an undocumented usage report on its server. Apart from Grok Bot, work done in cloud sessions never reaches this computer and is not counted.
 
 ---
 
